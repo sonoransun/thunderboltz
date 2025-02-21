@@ -61,6 +61,7 @@ tokenizers = "0.21.0"
 anyhow = "1.0.96"
 mistralrs = { path = "workspace/mistral.rs/mistralrs", features = ["metal"] }
 tokio = "1.43.0"
+mailparse = "0.16.0"
 
 [profile.dev]
 incremental = true # Compile your binary in smaller steps.

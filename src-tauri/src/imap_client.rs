@@ -1,5 +1,43 @@
 use std::env;
 
+use mailparse::MailHeaderMap;
+
+fn dump(pfx: &str, pm: &mailparse::ParsedMail) {
+    println!(">> Headers from {} <<", pfx);
+    for h in &pm.headers {
+        println!("  [{}] => [{}]", h.get_key(), h.get_value());
+    }
+    println!(">> Addresses from {} <<", pfx);
+    pm.headers
+        .get_first_value("From")
+        .map(|a| println!("{:?}", mailparse::addrparse(&a).unwrap()));
+    pm.headers
+        .get_first_value("To")
+        .map(|a| println!("{:?}", mailparse::addrparse(&a).unwrap()));
+    pm.headers
+        .get_first_value("Cc")
+        .map(|a| println!("{:?}", mailparse::addrparse(&a).unwrap()));
+    pm.headers
+        .get_first_value("Bcc")
+        .map(|a| println!("{:?}", mailparse::addrparse(&a).unwrap()));
+    println!(">> Body from {} <<", pfx);
+    if pm.ctype.mimetype.starts_with("text/") {
+        println!("  [{}]", pm.get_body().unwrap());
+    } else {
+        println!(
+            "   (Body is binary type {}, {} bytes in length)",
+            pm.ctype.mimetype,
+            pm.get_body().unwrap().len()
+        );
+    }
+    let mut c = 1;
+    for s in &pm.subparts {
+        println!(">> Subpart {} <<", c);
+        dump("subpart", s);
+        c += 1;
+    }
+}
+
 pub fn fetch_inbox_top() -> imap::error::Result<Option<String>> {
     // Try to load from .env if present, continue if not found
     if let Ok(path) = env::var("CARGO_MANIFEST_DIR") {
@@ -41,6 +79,9 @@ pub fn fetch_inbox_top() -> imap::error::Result<Option<String>> {
     let body = std::str::from_utf8(body)
         .expect("message was not valid utf-8")
         .to_string();
+
+    let mail = mailparse::parse_mail(body.as_bytes()).unwrap();
+    dump("message", &mail);
 
     // be nice to the server and log out
     imap_session.logout()?;
