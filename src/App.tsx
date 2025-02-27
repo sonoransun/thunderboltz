@@ -1,8 +1,9 @@
 import { createOpenAI } from '@ai-sdk/openai'
-import { Message, useChat } from '@ai-sdk/react'
+import { Message, useChat } from '@ai-sdk/solid'
 import { invoke } from '@tauri-apps/api/core'
 import { fetch as rawTauriFetch } from '@tauri-apps/plugin-http'
 import { streamText, tool, ToolInvocation } from 'ai'
+import { For } from 'solid-js'
 import { z } from 'zod'
 
 export type ToolInvocationWithResult<T = object> = ToolInvocation & {
@@ -62,41 +63,6 @@ const tauriFetch = async (url: RequestInfo | URL, options: RequestInit) => {
   return rawTauriFetch(url, options)
 }
 
-// const debugFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-//   console.log('fetch', input, init)
-
-//   const options = init as RequestInit & { body: string }
-//   const body = JSON.parse(options.body)
-
-//   try {
-//     // Make a direct request to Ollama using Tauri's fetch
-//     const response = await tauriFetch('http://localhost:11434/api/chat', {
-//       method: 'POST',
-//       headers: {
-//         'Content-Type': 'application/json',
-//       },
-//       body: JSON.stringify({
-//         model: 'llama3.2:3b-instruct-q4_1',
-//         messages: body.messages,
-//         stream: true,
-//       }),
-//     })
-
-//     console.log('Response status:', response.status)
-//     console.log('Response body:', response.body)
-
-//     // Return the raw response stream
-//     return new Response(response.body, {
-//       headers: response.headers,
-//       status: response.status,
-//     })
-//   } catch (error) {
-//     console.log('Error details:', error)
-//     console.error('Error calling Ollama:', error)
-//     throw error
-//   }
-// }
-
 const ollama = createOpenAI({
   baseURL: 'http://localhost:11434/v1',
 
@@ -145,8 +111,7 @@ const fetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
 
   const result = streamText({
     maxSteps: 5,
-    // model: fireworks('accounts/fireworks/models/llama-v3p1-405b-instruct'),
-    // model: fireworks('accounts/fireworks/models/deepseek-r1'),
+    // Currently llama is able to call the search tool, but it does not call the answer tool afterwards - need to debug why.
     // model: ollama('llama3.2:3b-instruct-q4_1', {
     //   structuredOutputs: true,
     // }),
@@ -155,7 +120,7 @@ const fetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
     }),
     system: p2,
     messages: processedMessages,
-    toolCallStreaming: true, // Causes issues because this results in incomplete result objects getting passed to React components. Experimentation to block rendering until the full objects are available is needed.
+    // toolCallStreaming: true, // Causes issues because this results in incomplete result objects getting passed to React components. Experimentation to block rendering until the full objects are available is needed.
     tools: {
       search: tool({
         description: "A tool for searching the user's inbox.",
@@ -197,32 +162,34 @@ export default function App() {
     // streamProtocol: 'text',
   })
 
-  console.log('messages', messages)
+  // console.log('messages', messages())
 
   return (
-    <div className="chat-container">
-      <div className="messages">
-        {messages.map((message, i) => (
-          <div key={message.id} className={`message ${message.role}`}>
-            {message.parts
-              .filter((part) => part.type === 'tool-invocation')
-              .map((part) => {
-                const { toolName, toolCallId, args } = part.toolInvocation
-                return (
-                  <div key={toolCallId}>
-                    <div>{toolName}</div>
+    <div class="chat-container">
+      <div class="messages">
+        <For each={messages()}>
+          {(message, i) => (
+            <div class={`message ${message.role}`}>
+              <For each={message.parts.filter((part) => part.type === 'tool-invocation')}>
+                {(part) => {
+                  const { toolName, toolCallId, args } = part.toolInvocation
+                  console.log('toolName', part.toolInvocation)
+                  return (
                     <div>
-                      {JSON.stringify(args)} {args?.text}
+                      {message.role}
+                      <div>{args.text}</div>
+                      {/* <div>{JSON.stringify(args)}</div> */}
                     </div>
-                  </div>
-                )
-              })}
-          </div>
-        ))}
+                  )
+                }}
+              </For>
+            </div>
+          )}
+        </For>
       </div>
 
       <form onSubmit={handleSubmit}>
-        <input value={input} onChange={handleInputChange} placeholder="Say something..." />
+        <input value={input()} onInput={handleInputChange} placeholder="Say something..." />
         <button type="submit">Send</button>
       </form>
     </div>

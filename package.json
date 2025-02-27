@@ -2,23 +2,25 @@
   "name": "mozilla-assist",
   "private": true,
   "version": "0.1.0",
+  "description": "Mozilla Assist",
   "type": "module",
   "scripts": {
+    "start": "vite",
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "vite build",
     "preview": "vite preview",
     "tauri": "tauri"
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.1.14",
     "@ai-sdk/react": "^1.1.18",
+    "@ai-sdk/solid": "^1.1.20",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-http": "^2.3.0",
     "@tauri-apps/plugin-opener": "^2",
     "@tauri-apps/plugin-websocket": "^2.3.0",
     "ai": "^4.1.46",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "solid-js": "^1.9.5",
     "zod": "^3.24.2"
   },
   "devDependencies": {
@@ -27,6 +29,7 @@
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
     "typescript": "~5.6.2",
-    "vite": "^6.0.3"
+    "vite": "^6.0.3",
+    "vite-plugin-solid": "^2.11.4"
   }
 }

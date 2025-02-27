@@ -1,6 +1,6 @@
 # Mozilla Assist
 
-Stack: Tauri + React + Typescript
+Stack: Tauri + Solid + Typescript
 
 ## Setup
 
