@@ -8,7 +8,7 @@ mod imap_client;
 use anyhow::Result;
 use sea_orm::ActiveModelTrait;
 use std::env;
-use tauri::{command, ActivationPolicy};
+use tauri::{command, ActivationPolicy, Manager};
 
 use entity::*;
 
@@ -32,6 +32,22 @@ fn get_openai_api_key() -> String {
     open_ai_api_key
 }
 
+// Add this new command to toggle dock visibility
+#[command]
+async fn toggle_dock_icon(app_handle: tauri::AppHandle, show: bool) -> Result<(), String> {
+    if cfg!(target_os = "macos") {
+        let policy = if show {
+            ActivationPolicy::Regular
+        } else {
+            ActivationPolicy::Accessory
+        };
+
+        let _ = app_handle.set_activation_policy(policy);
+    }
+
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     // This should be called as early in the execution of the app as possible
@@ -42,17 +58,20 @@ async fn main() -> Result<()> {
         .plugin(tauri_plugin_websocket::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_process::init())
-        .invoke_handler(tauri::generate_handler![get_openai_api_key,]);
+        .invoke_handler(tauri::generate_handler![
+            get_openai_api_key,
+            toggle_dock_icon, // Add the new command
+        ]);
 
     // Set the activation policy to accessory on macOS to prevent the app from being shown in the dock
-    if cfg!(target_os = "macos") {
-        builder = builder.setup(|app| {
-            let _ = app
-                .handle()
-                .set_activation_policy(ActivationPolicy::Accessory);
-            Ok(())
-        });
-    }
+    // if cfg!(target_os = "macos") {
+    //     builder = builder.setup(|app| {
+    //         let _ = app
+    //             .handle()
+    //             .set_activation_policy(ActivationPolicy::Accessory);
+    //         Ok(())
+    //     });
+    // }
 
     #[cfg(debug_assertions)]
     {
@@ -81,7 +100,7 @@ async fn main() -> Result<()> {
     //     clean_text_tokens_out: Set(0),
     // };
 
-    let inserted_message: message::Model = message.insert(&db).await?;
+    let _: message::Model = message.insert(&db).await?;
 
     let embedding = embedding::get_embedding("Hello, world!")?;
     println!("{:?}", embedding);

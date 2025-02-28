@@ -1,3 +1,4 @@
+import { invoke } from '@tauri-apps/api/core'
 import { Menu } from '@tauri-apps/api/menu'
 import { TrayIcon } from '@tauri-apps/api/tray'
 import { getCurrentWindow, Window } from '@tauri-apps/api/window'
@@ -10,6 +11,8 @@ export const createTray = () => {
 
   const showWindow = async () => {
     if (!appWindow) return
+
+    await invoke('toggle_dock_icon', { show: true })
 
     await appWindow.show()
     await appWindow.setFocus()
@@ -32,6 +35,8 @@ export const createTray = () => {
       event.preventDefault()
       await appWindow.hide()
       await appWindow.setSkipTaskbar(true)
+
+      await invoke('toggle_dock_icon', { show: false })
     })
   }
 
