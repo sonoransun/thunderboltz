@@ -4710,6 +4710,7 @@ dependencies = [
  "html2text",
  "http 1.2.0",
  "imap",
+ "indexmap 2.7.1",
  "keyring",
  "libsql",
  "mailparse",

@@ -3,6 +3,7 @@
 
 use anyhow::Result;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
+use indexmap::IndexMap;
 use libsql::{Connection, Error as LibsqlError, Value};
 use migration::{Migrator, MigratorTrait};
 use sea_orm::{Database, DatabaseConnection};
@@ -132,7 +133,7 @@ async fn select(
     state: State<'_, Mutex<AppState>>,
     query: String,
     values: Vec<JsonValue>,
-) -> Result<Vec<HashMap<String, JsonValue>>, String> {
+) -> Result<Vec<IndexMap<String, JsonValue>>, String> {
     let mut state = state.lock().await;
 
     let conn = state
@@ -161,7 +162,7 @@ async fn select(
         .await
         .map_err(|e| format!("Failed to fetch row: {}", e))?
     {
-        let mut value = HashMap::new();
+        let mut value = IndexMap::new();
         for i in 0..row.column_count() {
             let column_name = row.column_name(i).unwrap_or_default().to_string();
             let v = match row.get::<Value>(i) {

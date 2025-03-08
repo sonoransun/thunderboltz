@@ -1,5 +1,4 @@
-import { appDataDir } from '@tauri-apps/api/path'
-import Database from '@tauri-apps/plugin-sql'
+import Database from '@/lib/libsql'
 import { drizzle } from 'drizzle-orm/sqlite-proxy'
 import * as schema from '../db/schema'
 
@@ -13,10 +12,7 @@ export type SelectQueryResult = {
 /**
  * Loads the sqlite database via the Tauri Proxy.
  */
-// export const sqlite = await Database.load('sqlite:sqlite-1.db')
-const dataDir = await appDataDir()
-const dbPath = `sqlite://${dataDir}/local.db?mode=rwc`
-export const sqlite = await Database.load(dbPath)
+export const sqlite = await Database.load('data/local.db')
 
 /**
  * The drizzle database instance.

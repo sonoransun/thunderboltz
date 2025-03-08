@@ -1,18 +1,23 @@
-import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { customType, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 
-// export const users = sqliteTable('users', {
-//   age: integer('age').default(18),
-//   city: text('city').default('NULL'),
-//   created_at: text('created_at').default('CURRENT_TIMESTAMP'),
-//   deleted_at: text('deleted_at').default('NULL'),
-//   email: text('email').unique(),
-//   id: integer('id').primaryKey().unique(),
-//   name: text('name'),
-//   updated_at: text('updated_at').default('CURRENT_TIMESTAMP'),
-// })
+export const sqliteVector = <Dimensions extends number>(name: string, dimensions: Dimensions) => {
+  return customType<{ data: number[]; driverData: string }>({
+    dataType() {
+      return 'text'
+    },
+    toDriver(value: number[]): string {
+      return JSON.stringify(value)
+    },
+    fromDriver(value: string): number[] {
+      console.log('🚀 ~ fromDriver ~ value:', value)
+      return JSON.parse(value)
+    },
+  })(name)
+}
 
 export const settings = sqliteTable('setting', {
   id: integer('id').primaryKey().unique(),
   value: text('value'),
   updated_at: text('updated_at').default('CURRENT_TIMESTAMP'),
+  embedding: sqliteVector('embedding', 3),
 })
