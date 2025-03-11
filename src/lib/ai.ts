@@ -1,6 +1,6 @@
 import { createOpenAI } from '@ai-sdk/openai'
 import { invoke } from '@tauri-apps/api/core'
-import { Message, streamText, tool, ToolInvocation } from 'ai'
+import { LanguageModelResponseMetadata, Message, streamText, tool, ToolInvocation } from 'ai'
 import { z } from 'zod'
 
 // @todo replace with the actual message type
@@ -67,7 +67,19 @@ export const ollama = createOpenAI({
   apiKey: 'ollama',
 })
 
-export const aiFetchStreamingResponse = async (apiKey: string, _requestInfoOrUrl: RequestInfo | URL, init: RequestInit = {}) => {
+export const aiFetchStreamingResponse = async ({
+  apiKey,
+  init,
+  onFinish,
+}: {
+  apiKey: string
+  init: RequestInit
+  onFinish: (
+    response: LanguageModelResponseMetadata & {
+      readonly messages: Array<Message>
+    }
+  ) => void
+}) => {
   // _requestInfoOrUrl is not used, but is required by fetch. The OpenAI wrapper handles the URL For us.
 
   if (!apiKey) {
@@ -145,8 +157,8 @@ export const aiFetchStreamingResponse = async (apiKey: string, _requestInfoOrUrl
         // },
       }),
     },
-    onFinish: async () => {
-      // console.log('done', result.reasoning, result.finishReason, result.warnings, result.text, result.toolResults)
+    onFinish: async ({ response }) => {
+      onFinish?.(response)
     },
     toolChoice: 'required',
   })

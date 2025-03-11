@@ -16,7 +16,7 @@ export default function Home() {
         throw new Error('No API key found')
       }
 
-      return aiFetchStreamingResponse(apiKey, requestInfoOrUrl, init)
+      return aiFetchStreamingResponse({ apiKey, requestInfoOrUrl, init })
     },
     maxSteps: 5,
   })
@@ -25,7 +25,7 @@ export default function Home() {
     <>
       <HomeSidebar />
       <div class="h-full w-full">
-        <ChatUI chatHelpers={chatHelpers} />
+        <ChatUI chatHelpers={() => chatHelpers} />
       </div>
     </>
   )
