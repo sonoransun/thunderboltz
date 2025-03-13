@@ -1,4 +1,4 @@
-import { ChatMessage } from '@/types'
+import { ChatMessage, ParsedEmail, ParsedEmailHeader } from '@/types'
 import { Message } from 'ai'
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
@@ -33,4 +33,16 @@ export function convertMessageToDbChatMessage(message: Message, chatThreadId: st
     attachments: message.experimental_attachments ?? null,
     annotations: message.annotations ?? null,
   }
+}
+
+export function getHeadersFromParsedEmail(parsedEmail: ParsedEmail): ParsedEmailHeader[] {
+  return parsedEmail.parts[0]?.headers ?? []
+}
+
+export function getSubjectFromParsedEmail(parsedEmail: ParsedEmail): string | undefined {
+  return getHeadersFromParsedEmail(parsedEmail).find((header) => typeof header.name === 'string' && header.name.toLocaleLowerCase() === 'subject')?.value.Text
+}
+
+export function getMessageIdFromParsedEmail(parsedEmail: ParsedEmail): string | undefined {
+  return getHeadersFromParsedEmail(parsedEmail).find((header) => typeof header.name === 'string' && header.name.toLocaleLowerCase() === 'message_id')?.value.Text
 }

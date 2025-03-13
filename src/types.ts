@@ -41,3 +41,38 @@ export type DrizzleContextType = {
 export type ChatMessage = InferSelectModel<typeof chatMessagesTable>
 export type ChatThread = InferSelectModel<typeof chatThreadsTable>
 export type Setting = InferSelectModel<typeof settingsTable>
+
+export type ParsedEmail = {
+  attachments: unknown[]
+  clean_text: string
+  html_body: string
+  text_body: string
+  parts: ParsedEmailPart[]
+}
+
+export type ParsedEmailPart = {
+  body: {
+    Html?: string
+    Text?: string
+  }
+  headers: ParsedEmailHeader[]
+}
+
+export type ParsedEmailHeader = {
+  name:
+    | string
+    | {
+        other: string
+      }
+  value: {
+    Text?: string
+    ContentType?: {
+      c_type: string
+      c_subtype: string
+      attributes: string[][]
+    }
+  }
+  offset_start: number
+  offset_end: number
+  offset_field: number
+}

@@ -1,7 +1,8 @@
+import { ParsedEmail } from '@/types'
 import { invoke } from '@tauri-apps/api/core'
 import { tool } from 'ai'
 import { z } from 'zod'
-import { EmailMessage } from './ai'
+import { getMessageIdFromParsedEmail, getSubjectFromParsedEmail } from './utils'
 
 export const toolset = {
   search: tool({
@@ -11,12 +12,23 @@ export const toolset = {
       originalUserMessage: z.string().describe('The original user message that triggered this tool call.'),
     }),
     execute: async () => {
-      const messages = await invoke<EmailMessage[]>('fetch_inbox', { count: 3 })
-      console.log('messages', messages)
+      const messages = await invoke<ParsedEmail[]>('fetch_inbox', { count: 3 })
+
+      console.log(
+        messages.map(
+          (message) => `
+          Type: Message
+          Message ID: ${getMessageIdFromParsedEmail(message)}
+          Subject: ${getSubjectFromParsedEmail(message)}
+          Body: ${message.clean_text}
+        `
+        )
+      )
       return messages.map(
         (message) => `
           Type: Message
-          Subject: ${message.subject}
+          Message ID: ${getMessageIdFromParsedEmail(message)}
+          Subject: ${getSubjectFromParsedEmail(message)}
           Body: ${message.clean_text}
         `
       )
