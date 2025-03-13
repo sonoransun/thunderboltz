@@ -1,19 +1,9 @@
 use std::env;
 
 use crate::settings::Settings;
-use anyhow::Result;
-use chrono::{DateTime, Utc};
-use html2text::from_read;
-use mailparse::MailHeaderMap;
+use mail_parser::MessageParser;
 use regex::Regex;
-use serde::{Deserialize, Serialize};
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Message {
-    pub date: DateTime<Utc>,
-    pub subject: String,
-    pub body: String,
-    pub clean_text: String,
-}
+use serde_json;
 
 fn remove_urls(input: &str) -> String {
     let url_regex = Regex::new(r"https?://[^\s]+|www\.[^\s]+").unwrap();
@@ -22,88 +12,10 @@ fn remove_urls(input: &str) -> String {
     whitespace_regex.replace_all(&cleaned, " ").to_string()
 }
 
-pub fn parse_email_to_message(mail_body: &str, _id: Option<i32>) -> Result<Message> {
-    // Parse the email
-    let parsed_mail = mailparse::parse_mail(mail_body.as_bytes())?;
-
-    // Extract subject (with fallback to empty string if not found)
-    let subject = parsed_mail
-        .headers
-        .get_first_value("Subject")
-        .unwrap_or_else(|| String::from(""));
-
-    // Extract date (with fallback to current time if not found or parsing fails)
-    let date = parsed_mail
-        .headers
-        .get_first_value("Date")
-        .and_then(|date_str| mailparse::dateparse(&date_str).ok())
-        .map(|timestamp| {
-            chrono::DateTime::from_timestamp(timestamp, 0).unwrap_or_else(|| Utc::now())
-        })
-        .unwrap_or_else(|| Utc::now());
-
-    // Get body content
-    let body = parsed_mail.get_body()?;
-
-    // Extract clean text based on content type
-    let clean_text = if parsed_mail.ctype.mimetype.starts_with("text/html") {
-        // Convert HTML to plain text
-        from_read(body.as_bytes(), 80)?
-    } else {
-        // Already plain text
-        body.clone()
-    };
-
-    let clean_text = remove_urls(&clean_text);
-
-    // Create the message struct
-    let message: Message = Message {
-        date,
-        subject,
-        body,
-        clean_text,
-    };
-
-    Ok(message)
-}
-
-fn dump(pfx: &str, pm: &mailparse::ParsedMail) {
-    println!(">> Headers from {} <<", pfx);
-    for h in &pm.headers {
-        println!("  [{}] => [{}]", h.get_key(), h.get_value());
-    }
-    println!(">> Addresses from {} <<", pfx);
-    pm.headers
-        .get_first_value("From")
-        .map(|a| println!("{:?}", mailparse::addrparse(&a).unwrap()));
-    pm.headers
-        .get_first_value("To")
-        .map(|a| println!("{:?}", mailparse::addrparse(&a).unwrap()));
-    pm.headers
-        .get_first_value("Cc")
-        .map(|a| println!("{:?}", mailparse::addrparse(&a).unwrap()));
-    pm.headers
-        .get_first_value("Bcc")
-        .map(|a| println!("{:?}", mailparse::addrparse(&a).unwrap()));
-    println!(">> Body from {} <<", pfx);
-    if pm.ctype.mimetype.starts_with("text/") {
-        println!("  [{}]", pm.get_body().unwrap());
-    } else {
-        println!(
-            "   (Body is binary type {}, {} bytes in length)",
-            pm.ctype.mimetype,
-            pm.get_body().unwrap().len()
-        );
-    }
-    let mut c = 1;
-    for s in &pm.subparts {
-        println!(">> Subpart {} <<", c);
-        dump("subpart", s);
-        c += 1;
-    }
-}
-
-pub fn fetch_inbox_top(settings: &Settings, count: Option<usize>) -> anyhow::Result<Vec<Message>> {
+pub fn fetch_inbox(
+    settings: &Settings,
+    count: Option<usize>,
+) -> anyhow::Result<Vec<mail_parser::Message>> {
     let settings = settings
         .account
         .as_ref()
@@ -137,7 +49,8 @@ pub fn fetch_inbox_top(settings: &Settings, count: Option<usize>) -> anyhow::Res
     let fetch_range = format!("1:{}", count);
 
     let messages = imap_session.fetch(&fetch_range, "RFC822")?;
-    let mut result: Vec<Message> = Vec::new();
+
+    let mut result: Vec<mail_parser::Message> = Vec::new();
 
     for message in messages.iter() {
         let body = message.body().expect("message did not have a body!");
@@ -145,7 +58,8 @@ pub fn fetch_inbox_top(settings: &Settings, count: Option<usize>) -> anyhow::Res
             .expect("message was not valid utf-8")
             .to_string();
 
-        result.push(parse_email_to_message(&body, None)?);
+        let parsed_message = MessageParser::default().parse(body.as_bytes()).unwrap();
+        result.push(parsed_message.into_owned());
     }
 
     // be nice to the server and log out
@@ -213,4 +127,106 @@ pub fn listen_for_emails() -> imap::error::Result<()> {
     imap_session.logout().expect("Could not log out");
 
     Ok(())
+}
+
+/// Converts a mail_parser::Message to a serde_json::Value with proper body content
+/// This replaces the array indices in html_body and text_body with the actual content
+/// and handles multiple body parts if present
+pub fn message_to_json_value(message: &mail_parser::Message) -> anyhow::Result<serde_json::Value> {
+    let mut message_json = serde_json::to_value(message)?;
+
+    if let Some(obj) = message_json.as_object_mut() {
+        // Handle HTML body parts
+        if obj.contains_key("html_body") {
+            // Remove the original html_body array
+            obj.remove("html_body");
+
+            // Create a new array to store all HTML body parts as strings
+            let mut html_bodies = Vec::new();
+
+            // Try to get each HTML body part
+            let mut index = 0;
+            while let Some(html_body) = message.body_html(index) {
+                html_bodies.push(serde_json::Value::String(html_body.to_string()));
+                index += 1;
+            }
+
+            // If we found any HTML body parts
+            if !html_bodies.is_empty() {
+                if html_bodies.len() == 1 {
+                    // If there's only one part, store it directly as a string
+                    obj.insert("html_body".to_string(), html_bodies[0].clone());
+                } else {
+                    // If there are multiple parts, store them as an array
+                    obj.insert(
+                        "html_body".to_string(),
+                        serde_json::Value::Array(html_bodies),
+                    );
+                }
+            }
+        }
+
+        // Handle text body parts
+        if obj.contains_key("text_body") {
+            // Remove the original text_body array
+            obj.remove("text_body");
+
+            // Create a new array to store all text body parts as strings
+            let mut text_bodies = Vec::new();
+
+            // Try to get each text body part
+            let mut index = 0;
+            while let Some(text_body) = message.body_text(index) {
+                text_bodies.push(serde_json::Value::String(text_body.to_string()));
+                index += 1;
+            }
+
+            // If we found any text body parts
+            if !text_bodies.is_empty() {
+                if text_bodies.len() == 1 {
+                    // If there's only one part, store it directly as a string
+                    obj.insert("text_body".to_string(), text_bodies[0].clone());
+                } else {
+                    // If there are multiple parts, store them as an array
+                    obj.insert(
+                        "text_body".to_string(),
+                        serde_json::Value::Array(text_bodies),
+                    );
+                }
+            }
+        }
+
+        // Add a clean_text field that removes URLs from the text body
+        if let Some(text_body) = message.body_text(0) {
+            let clean_text = remove_urls(&text_body);
+            obj.insert(
+                "clean_text".to_string(),
+                serde_json::Value::String(clean_text),
+            );
+        }
+    }
+
+    Ok(message_json)
+}
+
+/// Converts a vector of mail_parser::Message to a vector of serde_json::Value
+/// This processes each message using the message_to_json_value function
+pub fn messages_to_json_values(
+    messages: &[mail_parser::Message],
+) -> anyhow::Result<Vec<serde_json::Value>> {
+    let mut result = Vec::with_capacity(messages.len());
+
+    for message in messages {
+        match message_to_json_value(message) {
+            Ok(json_value) => result.push(json_value),
+            Err(err) => {
+                // Log the error but continue processing other messages
+                eprintln!("Error converting message to JSON: {}", err);
+                // Add a null value as a placeholder for the failed message
+                result.push(serde_json::Value::Null);
+            }
+        }
+    }
+
+    Ok(result)
 }

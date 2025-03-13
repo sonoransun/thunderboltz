@@ -6,9 +6,10 @@ mod state;
 
 use anyhow::Result;
 use mozilla_assist_lib::{
-    imap_client::{fetch_inbox_top as imap_fetch_inbox_top, Message},
+    imap_client::{fetch_inbox as imap_fetch_inbox, messages_to_json_values},
     settings::get_settings,
 };
+use serde_json;
 use std::env;
 use tauri::{command, ActivationPolicy, Manager};
 use tokio::sync::Mutex;
@@ -31,10 +32,10 @@ async fn toggle_dock_icon(app_handle: tauri::AppHandle, show: bool) -> Result<()
 }
 
 #[command]
-async fn fetch_inbox_top(
+async fn fetch_inbox(
     app_handle: tauri::AppHandle,
     count: Option<usize>,
-) -> Result<Vec<Message>, String> {
+) -> Result<serde_json::Value, String> {
     let state = app_handle.state::<Mutex<AppState>>();
     let settings = {
         let mut state = state.lock().await;
@@ -46,10 +47,19 @@ async fn fetch_inbox_top(
         get_settings(conn)
             .await
             .map_err(|e| format!("Failed to get settings: {}", e))?
-    }; // The lock is released here when state goes out of scope
+    };
 
-    // Now make the IMAP call with the settings we retrieved
-    imap_fetch_inbox_top(&settings, count).map_err(|e| format!("Failed to fetch inbox top: {}", e))
+    // Fetch the raw messages
+    let messages = imap_fetch_inbox(&settings, count)
+        .map_err(|e| format!("Failed to fetch inbox top: {}", e))?;
+
+    // Process all messages using the utility function
+    let processed_messages = messages_to_json_values(&messages)
+        .map_err(|e| format!("Failed to convert messages to JSON: {}", e))?;
+
+    // Convert the processed messages to a single JSON value
+    serde_json::to_value(&processed_messages)
+        .map_err(|e| format!("Failed to serialize messages: {}", e))
 }
 
 #[tokio::main]
@@ -71,7 +81,7 @@ async fn main() -> Result<()> {
             libsql::init_libsql,
             libsql::execute,
             libsql::select,
-            fetch_inbox_top,
+            fetch_inbox,
         ]);
 
     #[cfg(debug_assertions)]
