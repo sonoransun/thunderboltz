@@ -2,7 +2,7 @@ import { ArrowLeft, Paperclip } from 'lucide-react'
 import { Link } from 'react-router'
 import { Sidebar } from './components/sidebar'
 import { Button } from './components/ui/button'
-import { MailCard } from './components/ui/mail-card'
+import { MailCard, MailCardList } from './components/ui/mail-card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './components/ui/select'
 
 export default function UiKitPage() {
@@ -69,20 +69,27 @@ export default function UiKitPage() {
         <Button>Default Button</Button>
         <div className="h-px bg-gray-200 dark:bg-gray-700 my-10" />
         <h2 className="text-2xl font-bold">Mail Card</h2>
-        <MailCard
-          from="example@example.com"
-          to="example@example.com"
-          content="Mail Card Content"
-          date="9/12/2024"
-          footer={
-            <>
-              <Button variant="file">
-                <Paperclip className="size-5" />
-                example.pdf
-              </Button>
-            </>
-          }
-        />
+        <MailCardList>
+          <MailCard id="mail-1" from="sender1@example.com" to="me@example.com" date="Today" content="First email content" />
+
+          <MailCard
+            id="mail-2"
+            from="sender2@example.com"
+            to="me@example.com"
+            date="Yesterday"
+            content="Second email content"
+            footer={
+              <>
+                <Button variant="file">
+                  <Paperclip className="size-5" />
+                  example.pdf
+                </Button>
+              </>
+            }
+          />
+
+          {/* Add more MailCard components as needed */}
+        </MailCardList>
       </div>
     </>
   )

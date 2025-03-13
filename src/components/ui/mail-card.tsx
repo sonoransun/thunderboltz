@@ -1,18 +1,28 @@
-import { ReactNode } from 'react'
+import React, { ReactNode } from 'react'
 
 interface MailCardProps {
+  id: string // Unique identifier for each card
   from?: string
   to?: string
   date?: string
   content?: string | ReactNode
   footer?: ReactNode
   className?: string
+  isContentVisible?: boolean
+  defaultVisible?: boolean
+  onToggle?: (id: string) => void // Callback when card is toggled
 }
 
 export function MailCard(props: MailCardProps) {
+  const handleToggle = () => {
+    if (props.onToggle) {
+      props.onToggle(props.id)
+    }
+  }
+
   return (
-    <div className={` bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md ${props.className ?? ''}`}>
-      <div className="p-4">
+    <div className={`bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md ${props.className ?? ''}`}>
+      <div className={`p-4 border-b border-gray-200 cursor-pointer`} onClick={handleToggle}>
         <div className="flex justify-between items-start">
           <div className="flex-1">
             {props.from && (
@@ -30,13 +40,16 @@ export function MailCard(props: MailCardProps) {
             )}
           </div>
 
-          {props.date && <div className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap ml-4">{props.date}</div>}
+          <div className="flex items-center">
+            {props.date && <div className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{props.date}</div>}
+            <div className="ml-2 text-gray-500">{props.isContentVisible ? '▼' : '►'}</div>
+          </div>
         </div>
       </div>
 
-      {props.content && (
+      {props.content && props.isContentVisible && (
         <>
-          <div className="border-t border-gray-200 dark:border-gray-700" />
+          <div className=" dark:border-gray-700" />
           <div className="p-4">
             <div className="text-sm text-gray-900 dark:text-gray-100">{typeof props.content === 'string' ? <p>{props.content}</p> : props.content}</div>
           </div>
@@ -50,4 +63,27 @@ export function MailCard(props: MailCardProps) {
       )}
     </div>
   )
+}
+
+// Create a container component to manage the accordion behavior
+interface MailCardListProps {
+  children: React.ReactElement<MailCardProps>[] | React.ReactElement<MailCardProps>
+}
+
+export function MailCardList({ children }: MailCardListProps) {
+  const [activeCardId, setActiveCardId] = React.useState<string | null>(null)
+
+  const enhancedChildren = React.Children.map(children, (child) => {
+    if (React.isValidElement<MailCardProps>(child)) {
+      return React.cloneElement(child, {
+        isContentVisible: child.props.id === activeCardId,
+        onToggle: (id: string) => {
+          setActiveCardId((currentId) => (currentId === id ? null : id))
+        },
+      })
+    }
+    return child
+  })
+
+  return <div className="space-y-4">{enhancedChildren}</div>
 }
