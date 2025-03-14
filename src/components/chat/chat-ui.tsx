@@ -2,6 +2,7 @@ import type { UseChatHelpers } from '@ai-sdk/react'
 import { ArrowUp, Mic, Plus } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 import { Button } from '../ui/button'
+import { Input } from '../ui/input'
 import { AgentToolResponse } from './agent-tool-response'
 
 interface ChatUIProps {
@@ -50,7 +51,7 @@ export default function ChatUI({ chatHelpers }: ChatUIProps) {
 
       <div className=" p-4">
         <form onSubmit={chatHelpers.handleSubmit} className="flex flex-col gap-2 bg-secondary p-4 rounded-md">
-          <input autoFocus value={chatHelpers.input} onChange={chatHelpers.handleInputChange} placeholder="Say something..." className="flex-1 px-4 py-2   " />
+          <Input variant="ghost" autoFocus value={chatHelpers.input} onChange={chatHelpers.handleInputChange} placeholder="Say something..." className="flex-1 px-4 py-2   " />
           <div className="flex gap-2 justify-between">
             <div className="flex gap-2">
               <Button variant="outline" className={`h-8 w-8 rounded-full p-0 flex items-center justify-center`}>
