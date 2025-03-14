@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
+import React from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 
@@ -6,8 +7,10 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useSettings } from '@/settings/provider'
 import { AccountsSettings } from '@/types'
+import { Plus } from 'lucide-react'
 
 const formSchema = z.object({
   hostname: z.string().min(1, { message: 'Hostname is required.' }),
@@ -18,6 +21,18 @@ const formSchema = z.object({
 
 export default function AccountsSettingsPage() {
   const { settings, setSettings } = useSettings()
+
+  // Add state for the selected account
+  const [selectedAccount, setSelectedAccount] = React.useState('john-doe')
+
+  // Mock data for multiple accounts
+  const accounts = [
+    { id: 'thoughtful', name: 'Thoughtful', email: 'chris@thoughtful.llc' },
+    { id: 'personal', name: 'Chris Gmail', email: 'chris.personal@gmail.com' },
+  ]
+
+  // Find the currently selected account
+  const currentAccount = accounts.find((account) => account.id === selectedAccount) || accounts[0]
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -38,7 +53,34 @@ export default function AccountsSettingsPage() {
 
   return (
     <>
-      <div className="flex flex-col gap-4 p-4 max-w-[800px]">
+      <div className="flex flex-col gap-4 p-4 w-full max-w-[760px] mx-auto">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-bold">Accounts</h2>
+          <Button variant="outline" size="icon">
+            <Plus />
+          </Button>
+        </div>
+
+        <Select value={selectedAccount} onValueChange={setSelectedAccount}>
+          <SelectTrigger className="w-full p-6 py-8" variant="outline">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center justify-center bg-primary text-primary-foreground size-8 rounded-md font-medium">{currentAccount.name[0]}</div>
+              <div className="flex flex-col">
+                <SelectValue placeholder="Select an account" />
+                <div className="text-sm text-muted-foreground">{currentAccount.email}</div>
+              </div>
+            </div>
+          </SelectTrigger>
+          <SelectContent>
+            {accounts.map((account) => (
+              <SelectItem key={account.id} value={account.id}>
+                <p className="text-left">{account.name}</p>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <h2 className="text-xl font-bold">IMAP</h2>
         <Card>
           <CardContent>
             <Form {...form}>

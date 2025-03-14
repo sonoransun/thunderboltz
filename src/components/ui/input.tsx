@@ -4,14 +4,14 @@ import * as React from 'react'
 import { cn } from '@/lib/utils'
 
 const inputVariants = cva(
-  'border-input file:text-foreground placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground flex min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none file:inline-flex file:border-0 file:bg-transparent file:text-sm file:font-medium disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm',
+  'border-input file:text-foreground placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground flex min-w-0 rounded-md border bg-transparent px-3 py-1 text-base outline-none file:inline-flex file:border-0 file:bg-transparent file:text-sm file:font-medium disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm',
   {
     variants: {
       variant: {
         default: 'focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]',
         filled: 'bg-muted/50 focus-visible:bg-transparent focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]',
         outline: 'border-2 focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[2px]',
-        ghost: 'border-none shadow-none focus-visible:bg-accent/50 focus-visible:ring-0',
+        ghost: 'border-none focus-visible:bg-accent/50 focus-visible:ring-0',
       },
       inputSize: {
         default: 'h-9 w-full',
