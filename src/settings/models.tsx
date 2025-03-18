@@ -32,7 +32,8 @@ export default function ModelsSettingsPage() {
 
   return (
     <>
-      <div className="flex flex-col gap-4 p-4 max-w-[800px]">
+      <div className="flex flex-col gap-4 p-4 w-full max-w-[760px] mx-auto">
+        <h2 className="text-xl font-bold">Models</h2>
         <Card>
           <CardContent>
             <Form {...form}>
@@ -50,9 +51,7 @@ export default function ModelsSettingsPage() {
                     </FormItem>
                   )}
                 />
-                <Button type="submit" className="w-full">
-                  Save
-                </Button>
+                <Button type="submit">Save</Button>
               </form>
             </Form>
           </CardContent>

@@ -1,32 +1,75 @@
-import { Button } from '@/components/ui/button'
-import { Sidebar } from '@/components/ui/sidebar'
+import { SidebarFooter } from '@/components/sidebar-footer'
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarRail,
+  SidebarTrigger,
+  useSidebar,
+} from '@/components/ui/sidebar'
 import { ArrowLeft } from 'lucide-react'
-import { Link, Outlet } from 'react-router'
+import { Link, Outlet, useLocation } from 'react-router'
 
 export default function SettingsLayout() {
+  const { open, setOpen } = useSidebar()
+  const location = useLocation()
+  const currentPath = location.pathname
+
   return (
     <>
-      <Sidebar>
-        <div className="flex flex-col gap-4">
-          <Button asChild variant="outline">
-            <Link to="/">
-              <ArrowLeft className="size-4 mr-2" />
-              Home
-            </Link>
-          </Button>
-          <div className="flex flex-col gap-2">
-            <Button asChild variant="ghost" className="justify-start">
-              <Link to="/settings/accounts">Accounts</Link>
-            </Button>
-            <Button asChild variant="ghost" className="justify-start">
-              <Link to="/settings/models">Models</Link>
-            </Button>
-          </div>
-        </div>
-      </Sidebar>
-      <div className="flex flex-col gap-4 p-4 w-full">
-        <Outlet />
-      </div>
+      <SidebarProvider open={open} onOpenChange={setOpen}>
+        <Sidebar>
+          <SidebarContent className="flex flex-col h-full">
+            <SidebarGroup>
+              <SidebarGroupContent className="flex justify-between w-full flex-1">
+                <SidebarTrigger className="cursor-pointer" />
+                <SidebarMenuButton asChild className="w-fit pr-0 pl-0 aspect-square items-center justify-center cursor-pointer">
+                  <Link to="/">
+                    <ArrowLeft className="size-5" />
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarGroupContent>
+            </SidebarGroup>
+
+            <SidebarGroup className="flex-1 overflow-y-auto">
+              <SidebarGroupLabel>Settings</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton asChild isActive={currentPath.includes('/settings/accounts')}>
+                      <Link to="/settings/accounts">
+                        <span>Accounts</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+
+                  <SidebarMenuItem>
+                    <SidebarMenuButton asChild isActive={currentPath.includes('/settings/models')}>
+                      <Link to="/settings/models">
+                        <span>Models</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+
+            <SidebarFooter />
+          </SidebarContent>
+          <SidebarRail />
+        </Sidebar>
+        <SidebarInset>
+          <div className="flex h-12 w-full items-center px-4">{open ? null : <SidebarTrigger className="cursor-pointer" />}</div>
+          <Outlet />
+        </SidebarInset>
+      </SidebarProvider>
     </>
   )
 }

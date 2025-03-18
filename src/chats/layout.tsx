@@ -5,6 +5,7 @@ import {
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarInset,
   SidebarMenu,
   SidebarMenuButton,
@@ -88,19 +89,27 @@ export default function Page() {
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
 
-                  <SidebarMenuItem>
-                    <SidebarMenuButton asChild>
-                      <Link to="/ui-kit">
-                        <span>UI Kit</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
+            <SidebarSeparator className="m-0" />
 
+            <SidebarGroup>
+              <SidebarGroupLabel>Dev Mode</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
                   <SidebarMenuItem>
                     <SidebarMenuButton asChild>
                       <Link to="/devtools">
                         <span>Dev Tools</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton asChild>
+                      <Link to="/ui-kit">
+                        <span>UI Kit</span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -111,6 +120,7 @@ export default function Page() {
             <SidebarSeparator className="m-0" />
 
             <SidebarGroup className="flex-1 overflow-y-auto">
+              <SidebarGroupLabel>Threads</SidebarGroupLabel>
               <SidebarMenu>
                 {chatThreads.map((thread) => (
                   <DropdownMenu key={thread.id}>
