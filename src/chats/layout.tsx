@@ -18,7 +18,8 @@ import {
 import { useDrizzle } from '@/db/provider'
 import { chatThreadsTable } from '@/db/schema'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { MoreHorizontal, SquarePen } from 'lucide-react'
+import { eq } from 'drizzle-orm'
+import { Loader2, MoreHorizontal, SquarePen } from 'lucide-react'
 import { Link, Outlet, useNavigate, useParams } from 'react-router'
 import { v7 as uuidv7 } from 'uuid'
 
@@ -50,6 +51,15 @@ export default function Page() {
     },
   })
 
+  const deleteChatMutation = useMutation({
+    mutationFn: async ({ id }: { id: string }) => {
+      await db.delete(chatThreadsTable).where(eq(chatThreadsTable.id, id))
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['chatThreads'] })
+    },
+  })
+
   const createNewChat = () => {
     createChatMutation.mutate()
   }
@@ -62,7 +72,7 @@ export default function Page() {
             <SidebarGroup>
               <SidebarGroupContent className="flex justify-between w-full flex-1">
                 <SidebarTrigger className="cursor-pointer" />
-                <SidebarMenuButton onClick={createNewChat} className="w-fit pr-0 pl-0 aspect-square items-center justify-center" tooltip="New Chat">
+                <SidebarMenuButton onClick={createNewChat} className="w-fit pr-0 pl-0 aspect-square items-center justify-center cursor-pointer" tooltip="New Chat">
                   <SquarePen className="size-5" />
                 </SidebarMenuButton>
               </SidebarGroupContent>
@@ -71,6 +81,14 @@ export default function Page() {
             <SidebarGroup>
               <SidebarGroupContent>
                 <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton asChild>
+                      <Link to="/settings/accounts">
+                        <span>Settings</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+
                   <SidebarMenuItem>
                     <SidebarMenuButton asChild>
                       <Link to="/ui-kit">
@@ -95,17 +113,25 @@ export default function Page() {
             <SidebarGroup className="flex-1 overflow-y-auto">
               <SidebarMenu>
                 {chatThreads.map((thread) => (
-                  <DropdownMenu key={thread.title}>
+                  <DropdownMenu key={thread.id}>
                     <SidebarMenuItem>
                       <Link to={`/chats/${thread.id}`}>
-                        <DropdownMenuTrigger asChild>
-                          <SidebarMenuButton className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground">
-                            {thread.title} <MoreHorizontal className="ml-auto" />
-                          </SidebarMenuButton>
-                        </DropdownMenuTrigger>
+                        <SidebarMenuButton isActive={thread.id === currentChatThreadId} className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground cursor-pointer">
+                          {thread.title}
+                          <DropdownMenuTrigger asChild>
+                            <MoreHorizontal className="ml-auto" />
+                          </DropdownMenuTrigger>
+                        </SidebarMenuButton>
                       </Link>
                       <DropdownMenuContent side="right" align="start" className="min-w-56 rounded-lg">
-                        <DropdownMenuItem>Delete</DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => {
+                            deleteChatMutation.mutate({ id: thread.id })
+                          }}
+                          disabled={deleteChatMutation.isPending}
+                        >
+                          {deleteChatMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : 'Delete'}
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </SidebarMenuItem>
                   </DropdownMenu>

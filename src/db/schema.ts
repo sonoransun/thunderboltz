@@ -49,7 +49,7 @@ export const chatMessagesTable = sqliteTable('chat_messages', {
   parts: text('parts', { mode: 'json' }).$type<Message['parts']>(),
   chat_thread_id: text('chat_thread_id')
     .notNull()
-    .references(() => chatThreadsTable.id),
+    .references(() => chatThreadsTable.id, { onDelete: 'cascade', onUpdate: 'cascade' }),
 })
 
 export const emailMessagesTable = sqliteTable('email_messages', {
