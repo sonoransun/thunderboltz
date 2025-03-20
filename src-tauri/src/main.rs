@@ -1,6 +1,7 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod db_pool;
 mod libsql;
 mod state;
 
@@ -38,13 +39,17 @@ async fn init_imap(app_handle: tauri::AppHandle) -> Result<(), String> {
     let mut state = state.lock().await;
 
     // Get database connection
-    let conn = state
-        .libsql
-        .as_mut()
+    let pool = state
+        .db_pool
+        .as_ref()
         .ok_or_else(|| "Database not initialized".to_string())?;
 
+    // Get a connection from the pool
+    let conn = pool.get_connection().await;
+    let mut conn_guard = conn.lock().await;
+
     // Get settings
-    let settings = get_settings(conn)
+    let settings = get_settings(&mut *conn_guard)
         .await
         .map_err(|e| format!("Failed to get settings: {}", e))?;
 
@@ -86,15 +91,16 @@ async fn init_imap_sync(app_handle: tauri::AppHandle) -> Result<(), String> {
     }
 
     // Check if database connection is initialized
-    if state.libsql.is_none() {
+    if state.db_pool.is_none() {
         return Err("Database not initialized. Call init_libsql first.".to_string());
     }
 
     // Get settings to create a new IMAP client for the sync service
-    let conn = state.libsql.as_mut().unwrap();
+    let pool = state.db_pool.as_ref().unwrap();
+    let conn = pool.get_connection().await;
+    let mut conn_guard = conn.lock().await;
 
-    // Get settings
-    let settings = get_settings(conn)
+    let settings = get_settings(&mut *conn_guard)
         .await
         .map_err(|e| format!("Failed to get settings: {}", e))?;
 
@@ -117,10 +123,13 @@ async fn init_imap_sync(app_handle: tauri::AppHandle) -> Result<(), String> {
         .connect()
         .map_err(|e| format!("Failed to connect sync client: {}", e))?;
 
-    // Get a clone of the database connection for the sync service
-    let db_conn = state.libsql.as_ref().unwrap().clone();
+    // Create a dedicated connection for the sync service
+    let db_conn = pool
+        .get_database()
+        .connect()
+        .map_err(|e| format!("Failed to create connection for sync: {}", e))?;
 
-    // Create the ImapSync instance using the existing database connection
+    // Create the ImapSync instance using the database connection
     let imap_sync = ImapSync::new(sync_imap_client, db_conn);
     state.imap_sync = Some(imap_sync);
 
@@ -194,7 +203,7 @@ async fn sync_mailbox(
         let sync_client = state_guard
             .imap_sync
             .as_ref()
-            .ok_or_else(|| "IMAP sync not initialized. Call init_imap first.".to_string())?;
+            .ok_or_else(|| "IMAP sync not initialized. Call init_imap_sync first.".to_string())?;
 
         // Parse the since date if provided
         let since_date = if let Some(since_str) = since {
@@ -227,16 +236,21 @@ async fn generate_embeddings(
     let state = app_handle.state::<Mutex<AppState>>();
     let state = state.lock().await;
 
-    // Get database connection
-    let conn = state
-        .libsql
-        .as_ref()
-        .ok_or_else(|| "Database not initialized".to_string())?;
+    // Get database connection based on what's available
+    if let Some(pool) = &state.db_pool {
+        // Create a dedicated connection for this potentially long-running operation
+        let conn = pool
+            .get_database()
+            .connect()
+            .map_err(|e| format!("Failed to create connection for embeddings: {}", e))?;
 
-    // Generate embeddings for all messages
-    assist_embeddings::generate_all(conn, batch_size)
-        .await
-        .map_err(|e| format!("Failed to generate embeddings: {}", e))
+        // Generate embeddings for all messages
+        assist_embeddings::generate_all(&conn, batch_size)
+            .await
+            .map_err(|e| format!("Failed to generate embeddings: {}", e))
+    } else {
+        Err("Database not initialized".to_string())
+    }
 }
 
 #[command]

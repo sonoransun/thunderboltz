@@ -3,10 +3,12 @@ use base64::{engine::general_purpose::STANDARD, Engine as _};
 use bytes::Bytes;
 use libsql::{Cipher, EncryptionConfig, Value};
 use serde_json::Value as JsonValue;
+use std::sync::Arc;
 use tauri::{command, State};
 use tokio::sync::Mutex;
 
 // Import AppState from the state module
+use crate::db_pool::DbPool;
 use crate::state::AppState;
 
 // Replace bind_values with this function to create params
@@ -58,49 +60,21 @@ pub async fn init_libsql(
     state: State<'_, Mutex<AppState>>,
     path: String,
     encryption_key: Option<String>,
+    pool_size: Option<usize>,
 ) -> Result<(), String> {
     println!("🚀 ~ init_libsql: {:?}, {:?}", path, encryption_key);
 
     let fqdb = path.clone();
+    let pool_size = pool_size.unwrap_or(4); // Default to 4 connections if not specified
 
-    // Ensure directory exists
-    if let Some(parent) = std::path::PathBuf::from(&fqdb).parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Problem creating directory: {}", e))?;
-    }
-
-    let mut builder = libsql::Builder::new_local(&fqdb);
-
-    // Apply encryption configuration if key is provided
-    if let Some(key) = encryption_key {
-        println!("🚀 ~ key: {}", key);
-
-        let cipher = Cipher::Aes256Cbc;
-        let encryption_key_bytes = Bytes::from(key);
-
-        let encryption_config = EncryptionConfig {
-            cipher,
-            encryption_key: encryption_key_bytes,
-        };
-
-        builder = builder.encryption_config(encryption_config);
-    } else {
-        println!("No encryption key provided...");
-    }
-
-    let database = builder
-        .build()
+    // Create the connection pool
+    let db_pool = DbPool::new(&fqdb, encryption_key, pool_size)
         .await
-        .map_err(|e| format!("Failed to build database: {}", e))?;
-
-    let conn = database
-        .connect()
-        .map_err(|e| format!("Failed to connect to database: {}", e))?;
+        .map_err(|e| format!("Failed to build database pool: {}", e))?;
 
     // Store connection in state
     let mut state = state.lock().await;
-
-    state.libsql = Some(conn);
+    state.db_pool = Some(db_pool);
 
     Ok(())
 }
@@ -112,14 +86,18 @@ pub async fn execute(
     query: String,
     values: Vec<JsonValue>,
 ) -> Result<(u64, i64), String> {
-    let mut state = state.lock().await;
+    let state = state.lock().await;
 
-    let conn = state
-        .libsql
-        .as_mut()
+    // Get a connection from the pool
+    let pool = state
+        .db_pool
+        .as_ref()
         .ok_or_else(|| "Database not initialized".to_string())?;
 
-    let mut stmt = conn
+    let conn = pool.get_connection().await;
+    let mut conn_guard = conn.lock().await;
+
+    let mut stmt = conn_guard
         .prepare(&query)
         .await
         .map_err(|e| format!("Failed to prepare statement: {}", e))?;
@@ -148,14 +126,18 @@ pub async fn select(
     query: String,
     values: Vec<JsonValue>,
 ) -> Result<Vec<Vec<JsonValue>>, String> {
-    let mut state = state.lock().await;
+    let state = state.lock().await;
 
-    let conn = state
-        .libsql
-        .as_mut()
+    // Get a connection from the pool
+    let pool = state
+        .db_pool
+        .as_ref()
         .ok_or_else(|| "Database not initialized".to_string())?;
 
-    let mut stmt = conn
+    let conn = pool.get_connection().await;
+    let mut conn_guard = conn.lock().await;
+
+    let mut stmt = conn_guard
         .prepare(&query)
         .await
         .map_err(|e| format!("Failed to prepare statement: {}", e))?;
