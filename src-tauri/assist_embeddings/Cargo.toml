@@ -19,6 +19,7 @@ hf-hub = "0.4.2"
 tokenizers = "0.21.1"
 uuid = { version = "1.16.0", features = ["v7", "rng"] }
 rayon = "1.8.0"
+objc = "0.2.7"
 
 [[example]]
 name = "generate_embeddings"

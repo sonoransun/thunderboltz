@@ -1,6 +1,6 @@
 /**
  * This file is auto-generated. Do not edit directly.
- * Generated on: 2025-03-21T05:50:26.817Z
+ * Generated on: 2025-03-21T08:41:18.952Z
  */
 
 export interface Migration {
@@ -34,5 +34,10 @@ export const migrations: Migration[] = [
     "hash": "0004_dizzy_war_machine",
     "name": "0004_dizzy_war_machine.sql",
     "sql": "-- Custom SQL migration file, put your code below! --\n\nCREATE INDEX IF NOT EXISTS embeddings_test_index ON embeddings (libsql_vector_idx(embedding));"
+  },
+  {
+    "hash": "0005_reflective_doctor_octopus",
+    "name": "0005_reflective_doctor_octopus.sql",
+    "sql": "PRAGMA foreign_keys=OFF;--> statement-breakpoint\nCREATE TABLE `__new_embeddings` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`email_message_id` text,\n\t`embedding` F32_BLOB(384),\n\tFOREIGN KEY (`email_message_id`) REFERENCES `email_messages`(`id`) ON UPDATE cascade ON DELETE cascade\n);\n--> statement-breakpoint\nINSERT INTO `__new_embeddings`(\"id\", \"email_message_id\", \"embedding\") SELECT \"id\", \"email_message_id\", \"embedding\" FROM `embeddings`;--> statement-breakpoint\nDROP TABLE `embeddings`;--> statement-breakpoint\nALTER TABLE `__new_embeddings` RENAME TO `embeddings`;--> statement-breakpoint\nPRAGMA foreign_keys=ON;--> statement-breakpoint\nCREATE UNIQUE INDEX `embeddings_id_unique` ON `embeddings` (`id`);--> statement-breakpoint\nCREATE UNIQUE INDEX `embeddings_email_message_id_unique` ON `embeddings` (`email_message_id`);"
   }
 ];

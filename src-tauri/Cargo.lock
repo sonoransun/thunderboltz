@@ -214,6 +214,7 @@ dependencies = [
  "candle-transformers",
  "hf-hub",
  "libsql",
+ "objc",
  "rayon",
  "serde",
  "serde_json",

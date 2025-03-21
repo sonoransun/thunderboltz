@@ -37,6 +37,7 @@ const init = async (): Promise<InitData> => {
 
   // This is done via migration but I'm putting it here just in case we reset the migrations.
   // await db.run(sql`
+  //   DROP INDEX IF EXISTS embeddings_test_index;
   //   CREATE INDEX IF NOT EXISTS embeddings_test_index ON embeddings (libsql_vector_idx(embedding));
   // `)
 

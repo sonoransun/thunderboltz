@@ -1,9 +1,10 @@
 use anyhow::Error as E;
-use candle::{DType, Module, Tensor};
+use candle::{DType, IndexOp, Tensor};
 use candle_core as candle;
 use candle_nn::VarBuilder;
-use candle_transformers::models::jina_bert::{BertModel, Config, PositionEmbeddingType};
+use candle_transformers::models::bert::{BertModel, Config};
 use hf_hub::{api::sync::Api, Repo, RepoType};
+use objc::rc::autoreleasepool;
 use std::sync::Arc;
 
 pub struct Embedder {
@@ -17,8 +18,8 @@ impl Embedder {
         // Initialize Metal device instead of CPU
         let device = candle::Device::new_metal(0)?;
 
-        // Get model and tokenizer files
-        let model_name = "jinaai/jina-embeddings-v2-base-en";
+        // Get model and tokenizer files - use E5-small model
+        let model_name = "intfloat/e5-small";
         let api = Api::new()?;
         let model = api
             .repo(Repo::new(model_name.to_string(), RepoType::Model))
@@ -30,26 +31,16 @@ impl Embedder {
         // Initialize tokenizer
         let tokenizer = tokenizers::Tokenizer::from_file(tokenizer_path).map_err(E::msg)?;
 
-        // Initialize model
-        let config = Config::new(
-            tokenizer.get_vocab_size(true),
-            768,
-            12,
-            12,
-            3072,
-            candle_nn::Activation::Gelu,
-            8192,
-            2,
-            0.02,
-            1e-12,
-            0,
-            PositionEmbeddingType::Alibi,
-        );
+        // Load E5-small config
+        let config_path = api
+            .repo(Repo::new(model_name.to_string(), RepoType::Model))
+            .get("config.json")?;
+        let config_str = std::fs::read_to_string(config_path)?;
+        let config: Config = serde_json::from_str(&config_str)?;
 
-        // We'll remain with F32 as changing to F16 causes dtype mismatch issues with the model operations
-        // The model internally may still do optimizations on GPU
+        // Create model with loaded config
         let vb = unsafe { VarBuilder::from_mmaped_safetensors(&[model], DType::F32, &device)? };
-        let model = BertModel::new(vb, &config)?;
+        let model = BertModel::load(vb, &config)?;
 
         Ok(Self {
             model,
@@ -59,27 +50,48 @@ impl Embedder {
     }
 
     pub fn generate_embedding(&self, text: &str) -> anyhow::Result<Tensor> {
-        // Tokenize input with truncation
-        let encoding = self.tokenizer.encode(text, true).map_err(E::msg)?;
-        let max_tokens = 8192; // Maximum context window for Jina embeddings model
+        // Use autoreleasepool to prevent Metal memory leaks
+        autoreleasepool(|| {
+            // Tokenize input with truncation
+            // E5 models typically use a specific format - add the prefix
+            let formatted_text = format!("passage: {}", text);
+            let encoding = self
+                .tokenizer
+                .encode(formatted_text, true)
+                .map_err(E::msg)?;
+            let max_tokens = 512; // E5-Small has a 512 token limit
 
-        // Always truncate to max length for simplicity and consistency
-        let token_ids = if encoding.get_ids().len() > max_tokens {
-            encoding.get_ids()[0..max_tokens].to_vec()
-        } else {
-            encoding.get_ids().to_vec()
-        };
+            // Always truncate to max length for simplicity and consistency
+            let token_ids = if encoding.get_ids().len() > max_tokens {
+                encoding.get_ids()[0..max_tokens].to_vec()
+            } else {
+                encoding.get_ids().to_vec()
+            };
 
-        let token_ids = Tensor::new(&token_ids[..], &self.device)?.unsqueeze(0)?;
+            // Get attention mask
+            let attention_mask = if encoding.get_attention_mask().len() > max_tokens {
+                encoding.get_attention_mask()[0..max_tokens].to_vec()
+            } else {
+                encoding.get_attention_mask().to_vec()
+            };
 
-        // Get embeddings
-        let embeddings = self.model.forward(&token_ids)?;
-        let (_n_sentence, n_tokens, _hidden_size) = embeddings.dims3()?;
-        let embeddings = (embeddings.sum(1)? / (n_tokens as f64))?;
+            // Convert to tensors
+            let token_ids = Tensor::new(&token_ids[..], &self.device)?.unsqueeze(0)?;
+            let attention_mask = Tensor::new(&attention_mask[..], &self.device)?.unsqueeze(0)?;
+            let token_type_ids = token_ids.zeros_like()?;
 
-        // Normalize and flatten embeddings
-        let normalized = normalize_l2(&embeddings).map_err(E::msg)?;
-        normalized.flatten_all().map_err(E::msg)
+            // Get embeddings using the standard BERT model
+            let embeddings =
+                self.model
+                    .forward(&token_ids, &token_type_ids, Some(&attention_mask))?;
+
+            // E5 uses the CLS token (first token) embedding for sentence representation
+            let sentence_embedding = embeddings.i((.., 0, ..))?;
+
+            // Normalize and flatten embeddings
+            let normalized = normalize_l2(&sentence_embedding).map_err(E::msg)?;
+            normalized.flatten_all().map_err(E::msg)
+        })
     }
 }
 
@@ -95,6 +107,45 @@ fn normalize_l2(v: &Tensor) -> candle::Result<Tensor> {
     v.broadcast_div(&v.sqr()?.sum_keepdim(1)?.sqrt()?)
 }
 
+// Add a new function to handle performance-managed embedding generation
+fn generate_embedding_with_performance_tracking(
+    embedder: &Embedder,
+    text: &str,
+    consecutive_slow_embeddings: &mut u32,
+    last_embedding_time: &mut std::time::Instant,
+) -> anyhow::Result<Vec<f32>> {
+    let start_time = std::time::Instant::now();
+    let embedding = generate_embedding(embedder, text)?;
+    let duration = start_time.elapsed();
+
+    // If embedding took a long time, track it
+    if duration > std::time::Duration::from_millis(1000) {
+        *consecutive_slow_embeddings += 1;
+
+        // If we've had multiple slow embeddings in a row, force a longer cooldown
+        if *consecutive_slow_embeddings > 2 {
+            println!("Detected performance degradation, cooling down GPU for 2 seconds");
+            std::thread::sleep(std::time::Duration::from_secs(2));
+            *consecutive_slow_embeddings = 0;
+        }
+    } else {
+        *consecutive_slow_embeddings = 0;
+    }
+
+    // A small delay between operations can help GPU stability
+    // Adaptive delay based on previous embedding time
+    let delay = if last_embedding_time.elapsed() > std::time::Duration::from_millis(500) {
+        // If last embedding was slow, wait longer
+        50
+    } else {
+        10
+    };
+    std::thread::sleep(std::time::Duration::from_millis(delay));
+
+    *last_embedding_time = std::time::Instant::now();
+    Ok(embedding)
+}
+
 pub fn generate_embeddings(embedder: &Embedder, texts: &[String]) -> anyhow::Result<Vec<Vec<f32>>> {
     if texts.is_empty() {
         return Ok(Vec::new());
@@ -103,11 +154,11 @@ pub fn generate_embeddings(embedder: &Embedder, texts: &[String]) -> anyhow::Res
     // Adjust batch size based on average text length to optimize memory usage
     let avg_text_len = texts.iter().map(|s| s.len()).sum::<usize>() / texts.len();
     let max_batch_size = if avg_text_len > 1000 {
-        10 // Use smaller batches for longer texts
+        5 // Use smaller batches for longer texts
     } else if avg_text_len > 500 {
-        20
+        10
     } else {
-        30 // Use larger batches for shorter texts
+        15 // Use smaller batches overall to prevent memory buildup
     };
 
     // Optimize single text case
@@ -116,25 +167,55 @@ pub fn generate_embeddings(embedder: &Embedder, texts: &[String]) -> anyhow::Res
     }
 
     let mut results = Vec::with_capacity(texts.len());
+    let mut consecutive_slow_embeddings = 0;
+    let mut last_embedding_time = std::time::Instant::now();
 
     // Process in batches to optimize memory usage and GPU utilization
-    for (_i, chunk) in texts.chunks(max_batch_size).enumerate() {
+    for (batch_idx, chunk) in texts.chunks(max_batch_size).enumerate() {
+        // Force cleanup between larger batches
+        if batch_idx > 0 && batch_idx % 5 == 0 {
+            // Force a longer cooldown period every 5 batches
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        }
+
         if chunk.len() == 1 {
-            let embedding = generate_embedding(embedder, &chunk[0])?;
+            // Single item in chunk - process directly with performance tracking
+            let embedding = generate_embedding_with_performance_tracking(
+                embedder,
+                &chunk[0],
+                &mut consecutive_slow_embeddings,
+                &mut last_embedding_time,
+            )?;
             results.push(embedding);
         } else {
             // Process batch sequentially to avoid GPU command buffer conflicts
             for text in chunk {
-                let embedding = generate_embedding(embedder, text)?;
+                let embedding = generate_embedding_with_performance_tracking(
+                    embedder,
+                    text,
+                    &mut consecutive_slow_embeddings,
+                    &mut last_embedding_time,
+                )?;
                 results.push(embedding);
-
-                // A small delay between operations can help GPU stability
-                std::thread::sleep(std::time::Duration::from_millis(5));
             }
         }
 
         // A slight pause between batches to allow GPU to catch up
-        std::thread::sleep(std::time::Duration::from_millis(10));
+        // Adaptive pause based on batch processing time
+        let batch_pause = if consecutive_slow_embeddings > 0 {
+            // If we've had slow embeddings, pause longer between batches
+            100
+        } else {
+            20
+        };
+        std::thread::sleep(std::time::Duration::from_millis(batch_pause));
+
+        // Force cleanup with autoreleasepool periodically
+        if batch_idx % 3 == 0 {
+            autoreleasepool(|| {
+                // Empty pool to force resource cleanup
+            });
+        }
     }
 
     Ok(results)
