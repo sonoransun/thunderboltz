@@ -29,7 +29,7 @@ export function convertMessageToDbChatMessage(message: Message, chatThreadId: st
     parts: message.parts || [],
     role: message.role,
     content: message.content,
-    chat_thread_id: chatThreadId,
+    chatThreadId,
     attachments: message.experimental_attachments ?? null,
     annotations: message.annotations ?? null,
   }

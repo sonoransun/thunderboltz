@@ -71,11 +71,11 @@ type AiFetchStreamingResponseOptions = {
 export const createModel = (modelConfig: Model): LanguageModelV1 => {
   switch (modelConfig.provider) {
     case 'openai': {
-      if (!modelConfig.api_key) {
+      if (!modelConfig.apiKey) {
         throw new Error('No API key provided')
       }
       const openai = createOpenAI({
-        apiKey: modelConfig.api_key,
+        apiKey: modelConfig.apiKey,
       })
       const model = openai(modelConfig.model, {
         structuredOutputs: true,
@@ -84,11 +84,11 @@ export const createModel = (modelConfig: Model): LanguageModelV1 => {
       return model
     }
     case 'fireworks': {
-      if (!modelConfig.api_key) {
+      if (!modelConfig.apiKey) {
         throw new Error('No API key provided')
       }
       const fireworks = createFireworks({
-        apiKey: modelConfig.api_key,
+        apiKey: modelConfig.apiKey,
       })
 
       const model = fireworks(modelConfig.model)
@@ -102,7 +102,7 @@ export const createModel = (modelConfig: Model): LanguageModelV1 => {
       const openaiCompatible = createOpenAICompatible({
         name: 'custom',
         baseURL: modelConfig.url,
-        apiKey: modelConfig.api_key ?? undefined,
+        apiKey: modelConfig.apiKey ?? undefined,
       })
       return openaiCompatible(modelConfig.model) as LanguageModelV1
     }

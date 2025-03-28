@@ -1,84 +1,133 @@
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Switch } from '@/components/ui/switch'
+import { Progress } from '@/components/ui/progress'
 import { useDrizzle } from '@/db/provider'
-import { emailMessagesTable } from '@/db/schema'
-import { useImapSync } from '@/sync'
-import { count } from 'drizzle-orm'
+import { ImapSyncer } from '@/imap/sync'
+import { Pause, Play, SkipForward } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 export default function ImapSyncSection() {
-  const imapSync = useImapSync()
   const { db } = useDrizzle()
-  const [messageCount, setMessageCount] = useState<number>(0)
-  const [isPolling, setIsPolling] = useState<boolean>(false)
-  const [isLoading, setIsLoading] = useState<boolean>(false)
+  const [syncer, setSyncer] = useState<ImapSyncer | null>(null)
+  const [status, setStatus] = useState({
+    messagesProcessed: 0,
+    messagesSynced: 0,
+    totalMessages: 0,
+    isSyncing: false,
+    progress: 0,
+  })
+  const [mailbox, setMailbox] = useState('All Mail')
+  const [pageSize, setPageSize] = useState(50)
+  const [syncSince, setSyncSince] = useState<Date | undefined>(undefined)
+  const [syncSinceInput, setSyncSinceInput] = useState('')
 
-  const handleSync = async () => {
-    setIsLoading(true)
-    try {
-      await imapSync.syncMailbox('All Mail', 100)
-      fetchMessageCount()
-    } catch (error) {
-      console.error('Error syncing mailbox:', error)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const fetchMessageCount = async () => {
-    try {
-      const result = await db.select({ value: count() }).from(emailMessagesTable)
-      setMessageCount(result[0]?.value || 0)
-    } catch (error) {
-      console.error('Error fetching message count:', error)
-    }
-  }
-
+  // Initialize the syncer when db is available
   useEffect(() => {
-    // Fetch initial message count
-    fetchMessageCount()
+    if (db) {
+      const newSyncer = new ImapSyncer(db, mailbox, pageSize)
+      setSyncer(newSyncer)
+    }
+  }, [db, mailbox, pageSize])
 
-    // Set up polling interval if enabled
-    let intervalId: number | undefined
+  // Update status periodically when syncing
+  useEffect(() => {
+    if (!syncer) return
 
-    if (isPolling) {
-      intervalId = window.setInterval(() => {
-        fetchMessageCount()
-      }, 10000) // 10 seconds
+    const updateStatus = () => {
+      setStatus(syncer.getStatus())
     }
 
-    // Clean up interval on unmount or when polling changes
-    return () => {
-      if (intervalId) {
-        window.clearInterval(intervalId)
-      }
+    const interval = setInterval(updateStatus, 500)
+    updateStatus() // Initial update
+
+    return () => clearInterval(interval)
+  }, [syncer])
+
+  const handleStartSync = async () => {
+    if (!syncer) return
+    try {
+      await syncer.syncMailbox(syncSince)
+    } catch (error) {
+      console.error('Sync failed:', error)
     }
-  }, [isPolling])
+  }
+
+  const handleCancelSync = () => {
+    if (syncer) {
+      syncer.cancel()
+    }
+  }
+
+  const handleStepSync = async () => {
+    if (!syncer || status.isSyncing) return
+    try {
+      await syncer.syncPage(1, pageSize, syncSince)
+    } catch (error) {
+      console.error('Step sync failed:', error)
+    }
+  }
+
+  const handleSyncSinceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSyncSinceInput(e.target.value)
+    if (e.target.value) {
+      setSyncSince(new Date(e.target.value))
+    } else {
+      setSyncSince(undefined)
+    }
+  }
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>IMAP Sync</CardTitle>
-        <CardDescription>Manage IMAP synchronization and view message counts</CardDescription>
+        <CardDescription>Sync emails from your IMAP server</CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <Button onClick={handleSync} disabled={isLoading}>
-            {isLoading ? 'Syncing...' : 'Sync IMAP'}
-          </Button>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-600 dark:text-gray-400">Enable Polling:</span>
-            <Switch checked={isPolling} onCheckedChange={setIsPolling} aria-label="Toggle polling" />
+      <CardContent>
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Mailbox</label>
+              <input type="text" className="w-full p-2 border rounded" value={mailbox} onChange={(e) => setMailbox(e.target.value)} disabled={status.isSyncing} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Page Size</label>
+              <input type="number" className="w-full p-2 border rounded" value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))} disabled={status.isSyncing} />
+            </div>
           </div>
-        </div>
 
-        <div className="mt-4 p-4 bg-gray-100 dark:bg-gray-800 rounded-md">
-          <div className="flex items-center justify-between">
-            <span className="font-medium">Messages:</span>
-            <span className="font-bold">{messageCount}</span>
+          <div>
+            <label className="block text-sm font-medium mb-1">Sync Since (optional)</label>
+            <input type="date" className="w-full p-2 border rounded" value={syncSinceInput} onChange={handleSyncSinceChange} disabled={status.isSyncing} />
           </div>
-          <div className="text-xs text-gray-500 mt-1">{isPolling ? 'Polling every 10 seconds' : 'Polling disabled'}</div>
+
+          <div className="flex justify-between items-center">
+            <div>
+              <p className="text-sm">
+                Messages: {status.messagesSynced} / {status.totalMessages || '?'}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              {status.isSyncing ? (
+                <Button variant="destructive" onClick={handleCancelSync} className="flex items-center gap-2">
+                  <Pause size={16} />
+                  Cancel Sync
+                </Button>
+              ) : (
+                <>
+                  <Button onClick={handleStartSync} className="flex items-center gap-2">
+                    <Play size={16} />
+                    Start Sync
+                  </Button>
+                  <Button onClick={handleStepSync} variant="outline" className="flex items-center gap-2">
+                    <SkipForward size={16} />
+                    Step
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {status.isSyncing && <Progress value={status.progress} className="w-full" />}
         </div>
       </CardContent>
     </Card>

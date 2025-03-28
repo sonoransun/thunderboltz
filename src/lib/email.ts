@@ -1,5 +1,5 @@
 import { emailMessagesTable, emailThreadsTable } from '@/db/schema'
-import { DrizzleContextType, EmailMessage } from '@/types'
+import { DrizzleContextType, EmailMessage, EmailThread } from '@/types'
 import { eq, sql } from 'drizzle-orm'
 import { v7 as uuidv7 } from 'uuid'
 
@@ -69,7 +69,7 @@ export class EmailThreader {
         const unprocessedEmails = await this.db
           .select()
           .from(emailMessagesTable)
-          .where(sql`${emailMessagesTable.email_thread_id} IS NULL`)
+          .where(sql`${emailMessagesTable.emailThreadId} IS NULL`)
           .limit(this.batchSize)
 
         // If no more emails to process, break the loop
@@ -102,27 +102,22 @@ export class EmailThreader {
   private async processEmail(email: EmailMessage): Promise<void> {
     try {
       // Extract references from the email parts
-      const [rootEmailMessageId] = extractReferences(email)
+      const [rootImapId] = extractReferences(email)
 
       // If we don't have a root email message id, create a new thread
-      if (!rootEmailMessageId) {
-        const threadId = uuidv7()
-        await this.createThread(threadId, email.subject, email.date, email.messageId)
-        await this.addEmailToThread(email.id, threadId, email.subject, email.date)
+      if (!rootImapId) {
+        await this.createThread(email, email.imapId)
         return
       }
 
-      // Look for a thread with this root_message_id
-      const existingThread = await this.db.select().from(emailThreadsTable).where(eq(emailThreadsTable.root_message_id, rootEmailMessageId)).limit(1).get()
+      const thread = await this.db.select().from(emailThreadsTable).where(eq(emailThreadsTable.rootImapId, rootImapId)).limit(1).get()
 
-      if (!existingThread) {
-        const threadId = uuidv7()
-        await this.createThread(threadId, email.subject, email.date, rootEmailMessageId)
-        await this.addEmailToThread(email.id, threadId, email.subject, email.date)
+      if (!thread) {
+        await this.createThread(email, rootImapId)
         return
       }
 
-      await this.addEmailToThread(email.id, existingThread.id, email.subject, email.date)
+      await this.addEmailToThread(email, thread)
     } catch (error) {
       console.error(`Failed to process email ${email.id}:`, error)
       throw error
@@ -131,61 +126,55 @@ export class EmailThreader {
 
   /**
    * Create a new email thread
-   * @param id Thread ID
-   * @param subject Thread subject
-   * @param date Thread date
-   * @param rootEmailMessageId Root email message id
+   * @param email Email message
+   * @param rootImapId The imap id of the root email message
    * @returns A promise that resolves when the thread is created
    */
-  private async createThread(id: string, subject: string | null, date: string, rootEmailMessageId: string): Promise<void> {
-    try {
-      await this.db.insert(emailThreadsTable).values({
-        id,
-        subject: subject || '(No Subject)',
-        date,
-        root_message_id: rootEmailMessageId,
-      })
-      this.threadsCreated++
-    } catch (error) {
-      console.error('Failed to create thread:', error)
-      throw error
-    }
+  private async createThread(email: EmailMessage, rootImapId: string): Promise<string> {
+    const id = uuidv7()
+
+    await this.db.insert(emailThreadsTable).values({
+      id,
+      subject: email.subject || '(No Subject)',
+      firstMessageAt: email.sentAt,
+      lastMessageAt: email.sentAt,
+      rootImapId,
+    })
+
+    this.threadsCreated++
+
+    return id
   }
 
   /**
    * Add an email to a thread
-   * @param emailId Email ID
+   * @param email Email message
    * @param threadId Thread ID
-   * @param subject Email subject
-   * @param date Email date
    * @returns A promise that resolves when the email is added to the thread
    */
-  private async addEmailToThread(emailId: string, threadId: string, subject: string | null, date: string): Promise<void> {
-    try {
-      // Update the email to be part of the thread
-      await this.db.update(emailMessagesTable).set({ email_thread_id: threadId }).where(eq(emailMessagesTable.id, emailId))
+  private async addEmailToThread(email: EmailMessage, thread: EmailThread): Promise<void> {
+    // Update the email to be part of the thread
+    await this.db.update(emailMessagesTable).set({ emailThreadId: thread.id }).where(eq(emailMessagesTable.id, email.id))
 
-      // Update thread subject if this email is older than the current thread date
-      const thread = await this.db.select().from(emailThreadsTable).where(eq(emailThreadsTable.id, threadId)).limit(1)
+    // If this email is older, update the thread subject and firstMessageAt
+    if (email.sentAt < thread.firstMessageAt) {
+      await this.db
+        .update(emailThreadsTable)
+        .set({
+          subject: email.subject || thread.subject || '(No Subject)',
+          firstMessageAt: email.sentAt,
+        })
+        .where(eq(emailThreadsTable.id, thread.id))
+    }
 
-      if (thread.length > 0) {
-        const threadDate = new Date(thread[0].date)
-        const emailDate = new Date(date)
-
-        // If this email is older, update the thread subject and date
-        if (emailDate < threadDate) {
-          await this.db
-            .update(emailThreadsTable)
-            .set({
-              subject: subject || thread[0].subject || '(No Subject)',
-              date,
-            })
-            .where(eq(emailThreadsTable.id, threadId))
-        }
-      }
-    } catch (error) {
-      console.error(`Failed to add email ${emailId} to thread ${threadId}:`, error)
-      throw error
+    // If this email is newer, update the lastMessageAt
+    if (email.sentAt > thread.lastMessageAt) {
+      await this.db
+        .update(emailThreadsTable)
+        .set({
+          lastMessageAt: email.sentAt,
+        })
+        .where(eq(emailThreadsTable.id, thread.id))
     }
   }
 }

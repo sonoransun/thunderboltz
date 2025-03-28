@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useDrizzle } from '@/db/provider'
 import { search } from '@/lib/embeddings'
+import { EmailMessage } from '@/types'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
@@ -126,17 +127,17 @@ export default function SearchSection() {
                         <TabsContent value="messages" className="px-4 pb-4">
                           <div className="space-y-4">
                             {result.email_messages &&
-                              result.email_messages.map((message: any, msgIndex: number) => (
+                              result.email_messages.map((message: EmailMessage, msgIndex: number) => (
                                 <div key={msgIndex} className="p-3 bg-gray-50 dark:bg-gray-800 rounded-md">
                                   <div className="flex justify-between mb-2">
-                                    <div className="font-medium">{message.from}</div>
-                                    <div className="text-xs text-gray-500 dark:text-gray-400">{new Date(message.date).toLocaleString()}</div>
+                                    <div className="font-medium">{message.fromAddress}</div>
+                                    <div className="text-xs text-gray-500 dark:text-gray-400">{new Date(message.sentAt).toUTCString()}</div>
                                   </div>
                                   <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
                                     <span className="mr-4">Thread ID: {result.email_thread?.id || 'N/A'}</span>
-                                    <span>Message ID: {message.id || message.message_id || 'N/A'}</span>
+                                    <span>Message ID: {message.id || message.imapId || 'N/A'}</span>
                                   </div>
-                                  <div className="text-sm whitespace-pre-wrap">{message.text_body}</div>
+                                  <div className="text-sm whitespace-pre-wrap">{message.textBody}</div>
                                 </div>
                               ))}
                             {(!result.email_messages || result.email_messages.length === 0) && (

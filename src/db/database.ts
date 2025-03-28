@@ -46,7 +46,7 @@ export const initializeDrizzleDatabase = async (path: string) => {
       return { rows: results }
     },
     // Pass the schema to the drizzle instance
-    { schema: { ...schema, ...relations }, logger: true }
+    { schema: { ...schema, ...relations }, logger: false, casing: 'snake_case' }
   )
 
   /**

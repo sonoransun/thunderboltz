@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "b3c7cb94-9ba1-4f6f-a72c-756ac7ee5b86",
+  "id": "6baf269c-b261-44d6-85ca-7b8026c0054f",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "chat_messages": {
@@ -117,6 +117,111 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "contacts": {
+      "name": "contacts",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "first_seen_at": {
+          "name": "first_seen_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "last_seen_at": {
+          "name": "last_seen_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "contacts_id_unique": {
+          "name": "contacts_id_unique",
+          "columns": [
+            "id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "email_addresses": {
+      "name": "email_addresses",
+      "columns": {
+        "address": {
+          "name": "address",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "contact_id": {
+          "name": "contact_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "first_seen_at": {
+          "name": "first_seen_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "last_seen_at": {
+          "name": "last_seen_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "email_addresses_contact_id_contacts_id_fk": {
+          "name": "email_addresses_contact_id_contacts_id_fk",
+          "tableFrom": "email_addresses",
+          "tableTo": "contacts",
+          "columnsFrom": [
+            "contact_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "cascade"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "email_messages": {
       "name": "email_messages",
       "columns": {
@@ -127,8 +232,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "message_id": {
-          "name": "message_id",
+        "imap_id": {
+          "name": "imap_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -162,18 +267,39 @@
           "notNull": false,
           "autoincrement": false
         },
-        "date": {
-          "name": "date",
-          "type": "text",
+        "sent_at": {
+          "name": "sent_at",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "from": {
-          "name": "from",
+        "from_address": {
+          "name": "from_address",
           "type": "text",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "from_contact_id": {
+          "name": "from_contact_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "to_address": {
+          "name": "to_address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "to_contact_id": {
+          "name": "to_contact_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
           "autoincrement": false
         },
         "in_reply_to": {
@@ -199,15 +325,67 @@
           ],
           "isUnique": true
         },
-        "email_messages_message_id_unique": {
-          "name": "email_messages_message_id_unique",
+        "email_messages_imapId_unique": {
+          "name": "email_messages_imapId_unique",
           "columns": [
-            "message_id"
+            "imap_id"
           ],
           "isUnique": true
         }
       },
       "foreignKeys": {
+        "email_messages_from_address_email_addresses_address_fk": {
+          "name": "email_messages_from_address_email_addresses_address_fk",
+          "tableFrom": "email_messages",
+          "tableTo": "email_addresses",
+          "columnsFrom": [
+            "from_address"
+          ],
+          "columnsTo": [
+            "address"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "email_messages_from_contact_id_contacts_id_fk": {
+          "name": "email_messages_from_contact_id_contacts_id_fk",
+          "tableFrom": "email_messages",
+          "tableTo": "contacts",
+          "columnsFrom": [
+            "from_contact_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "email_messages_to_address_email_addresses_address_fk": {
+          "name": "email_messages_to_address_email_addresses_address_fk",
+          "tableFrom": "email_messages",
+          "tableTo": "email_addresses",
+          "columnsFrom": [
+            "to_address"
+          ],
+          "columnsTo": [
+            "address"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "email_messages_to_contact_id_contacts_id_fk": {
+          "name": "email_messages_to_contact_id_contacts_id_fk",
+          "tableFrom": "email_messages",
+          "tableTo": "contacts",
+          "columnsFrom": [
+            "to_contact_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "email_messages_email_thread_id_email_threads_id_fk": {
           "name": "email_messages_email_thread_id_email_threads_id_fk",
           "tableFrom": "email_messages",
@@ -243,18 +421,25 @@
           "notNull": true,
           "autoincrement": false
         },
-        "date": {
-          "name": "date",
+        "root_imap_id": {
+          "name": "root_imap_id",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "first_message_at": {
+          "name": "first_message_at",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "root_message_id": {
-          "name": "root_message_id",
-          "type": "text",
+        "last_message_at": {
+          "name": "last_message_at",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "autoincrement": false
         }
       },
@@ -319,15 +504,15 @@
           ],
           "isUnique": true
         },
-        "embeddings_email_message_id_unique": {
-          "name": "embeddings_email_message_id_unique",
+        "embeddings_emailMessageId_unique": {
+          "name": "embeddings_emailMessageId_unique",
           "columns": [
             "email_message_id"
           ],
           "isUnique": true
         },
-        "embeddings_email_thread_id_unique": {
-          "name": "embeddings_email_thread_id_unique",
+        "embeddings_emailThreadId_unique": {
+          "name": "embeddings_emailThreadId_unique",
           "columns": [
             "email_thread_id"
           ],
@@ -446,11 +631,11 @@
         },
         "updated_at": {
           "name": "updated_at",
-          "type": "text",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false,
-          "default": "(CURRENT_DATE)"
+          "default": "(unixepoch())"
         }
       },
       "indexes": {},

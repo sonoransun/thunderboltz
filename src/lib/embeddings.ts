@@ -78,19 +78,19 @@ export async function search(db: DrizzleContextType['db'], searchText: string, l
         distance: sql`vector_distance_cos(${embeddingsTable.embedding}, vector32(${JSON.stringify(embedding)}))`.as('distance'),
         email_thread_id: emailThreadsTable.id,
         email_thread: emailThreadsTable,
-        as_text: embeddingsTable.as_text,
+        as_text: embeddingsTable.asText,
       })
       .from(sql`vector_top_k('embeddings_index', vector32(${JSON.stringify(embedding)}), ${limit}) as r`)
       .leftJoin(embeddingsTable, sql`${embeddingsTable}.rowid = r.id`)
-      .leftJoin(emailThreadsTable, eq(emailThreadsTable.id, embeddingsTable.email_thread_id))
-      .where(isNotNull(embeddingsTable.email_thread_id))
+      .leftJoin(emailThreadsTable, eq(emailThreadsTable.id, embeddingsTable.emailThreadId))
+      .where(isNotNull(embeddingsTable.emailThreadId))
       .groupBy(emailThreadsTable.id)
       .orderBy(sql`distance ASC`)
 
     // Fetch messages for each thread
     const resultsWithMessages = await Promise.all(
       results.map(async (result) => {
-        const email_messages = await db.select().from(emailMessagesTable).where(eq(emailMessagesTable.email_thread_id, result.email_thread_id!)).orderBy(emailMessagesTable.date)
+        const email_messages = await db.select().from(emailMessagesTable).where(eq(emailMessagesTable.emailThreadId, result.email_thread_id!)).orderBy(emailMessagesTable.sentAt)
 
         return {
           ...result,

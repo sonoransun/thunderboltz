@@ -1,8 +1,10 @@
 use anyhow::Result;
+use chrono::{TimeZone, Utc};
 use imap::{self, ImapConnection, Session};
 use mail_parser::MessageParser;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
@@ -110,6 +112,164 @@ impl ImapClient {
                 }
             }
         }
+
+        Ok(result)
+    }
+
+    pub fn fetch_messages(
+        &self,
+        mailbox: &str,
+        start_index: Option<usize>,
+        count: Option<usize>,
+    ) -> Result<JsonValue> {
+        self.connect()?;
+
+        let mut session_guard = self.session.lock().unwrap();
+        let mut messages = Vec::new();
+        let mut total_messages = 0;
+        let mut actual_start_index = 0;
+
+        if let Some(ref mut session) = *session_guard {
+            // The SELECT command returns mailbox information including message count
+            // We can get the total messages directly from this response
+            let mailbox_data = session.select(mailbox)?;
+            total_messages = mailbox_data.exists as usize;
+
+            // If mailbox is empty, return empty result
+            if total_messages == 0 {
+                // Return a properly structured empty result
+                let result = serde_json::json!({
+                    "index": 0,
+                    "total": 0,
+                    "messages": []
+                });
+                return Ok(result);
+            }
+
+            // Calculate the range to fetch
+            let requested_count = count.unwrap_or(10);
+            let start = start_index.unwrap_or_else(|| {
+                if requested_count >= total_messages {
+                    1
+                } else {
+                    total_messages - requested_count + 1
+                }
+            });
+            actual_start_index = start;
+
+            // Ensure start is valid (not beyond total)
+            let start = std::cmp::min(start, total_messages);
+
+            // Calculate end index
+            let end = std::cmp::min(start + requested_count - 1, total_messages);
+
+            // Create the fetch range
+            let fetch_range = format!("{}:{}", start, end);
+
+            let message_set = session.fetch(&fetch_range, "RFC822")?;
+
+            for message in message_set.iter() {
+                let body = message.body().expect("message did not have a body!");
+                let body = std::str::from_utf8(body)
+                    .expect("message was not valid utf-8")
+                    .to_string();
+
+                let parsed_message = MessageParser::default().parse(body.as_bytes()).unwrap();
+
+                // Extract message ID
+                let imap_id = parsed_message
+                    .message_id()
+                    .map(|id| id.to_string())
+                    .unwrap_or_else(|| "unknown".to_string());
+
+                // Extract HTML body
+                let html_body = parsed_message
+                    .body_html(0)
+                    .map(|body| body.to_string())
+                    .unwrap_or_default();
+
+                // Extract text body
+                let text_body = parsed_message
+                    .body_text(0)
+                    .map(|body| body.to_string())
+                    .unwrap_or_default();
+
+                // Extract cleaned text body
+                let clean_text = remove_urls(&text_body);
+
+                // Extract subject
+                let subject = parsed_message.subject().map(|s| s.to_string());
+
+                // Extract sent_at timestamp
+                let sent_at = parsed_message
+                    .date()
+                    .map(|d| {
+                        // Convert mail-parser::DateTime to chrono::DateTime
+                        let year = d.year as i32;
+                        let month = d.month as u32;
+                        let day = d.day as u32;
+                        let hour = d.hour as u32;
+                        let minute = d.minute as u32;
+                        let second = d.second as u32;
+
+                        Utc.with_ymd_and_hms(year, month, day, hour, minute, second)
+                            .single()
+                            .map(|dt| dt.timestamp())
+                    })
+                    .flatten()
+                    .unwrap_or_else(|| Utc::now().timestamp());
+
+                // Extract from address
+                let from_address = parsed_message
+                    .from()
+                    .and_then(|addresses| addresses.first())
+                    .and_then(|addr| addr.address())
+                    .map(|addr| addr.to_string())
+                    .unwrap_or_default();
+
+                // Extract in_reply_to
+                let in_reply_to = parsed_message
+                    .in_reply_to()
+                    .as_text()
+                    .map(|s| s.to_string());
+
+                // Extract references
+                let references = parsed_message.references().as_text().map(|s| s.to_string());
+
+                // Create the message object
+                let mut message_obj = serde_json::Map::new();
+                message_obj.insert("imap_id".to_string(), JsonValue::String(imap_id));
+                message_obj.insert("html_body".to_string(), JsonValue::String(html_body));
+                message_obj.insert("text_body".to_string(), JsonValue::String(text_body));
+
+                if let Some(subj) = subject {
+                    message_obj.insert("subject".to_string(), JsonValue::String(subj));
+                }
+
+                message_obj.insert("sent_at".to_string(), JsonValue::Number(sent_at.into()));
+                message_obj.insert("from_address".to_string(), JsonValue::String(from_address));
+
+                if let Some(reply) = in_reply_to {
+                    message_obj.insert("in_reply_to".to_string(), JsonValue::String(reply));
+                }
+
+                if let Some(refs) = references {
+                    message_obj.insert("references".to_string(), JsonValue::String(refs));
+                }
+
+                // Add clean_text
+                message_obj.insert("clean_text".to_string(), JsonValue::String(clean_text));
+
+                messages.push(JsonValue::Object(message_obj));
+            }
+        }
+
+        // Create the result object with index, total and messages fields
+        let result = serde_json::json!({
+            "index": actual_start_index,
+            "total": total_messages,
+            "messages": messages
+        });
 
         Ok(result)
     }

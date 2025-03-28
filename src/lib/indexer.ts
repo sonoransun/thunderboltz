@@ -39,9 +39,9 @@ export class Indexer {
     const threads = await this.db
       .select()
       .from(emailThreadsTable)
-      .leftJoin(embeddingsTable, eq(emailThreadsTable.id, embeddingsTable.email_thread_id))
+      .leftJoin(embeddingsTable, eq(emailThreadsTable.id, embeddingsTable.emailThreadId))
       .where(sql`${embeddingsTable.id} IS NULL`)
-      .orderBy(sql`${emailThreadsTable.date} DESC`)
+      .orderBy(sql`${emailThreadsTable.lastMessageAt} DESC`)
       .limit(this.batchSize)
 
     // For each thread, fetch its messages
@@ -50,8 +50,8 @@ export class Indexer {
         const messages = await this.db
           .select()
           .from(emailMessagesTable)
-          .where(eq(emailMessagesTable.email_thread_id, thread.email_threads.id))
-          .orderBy(sql`${emailMessagesTable.date} ASC`)
+          .where(eq(emailMessagesTable.emailThreadId, thread.email_threads.id))
+          .orderBy(sql`${emailMessagesTable.sentAt} ASC`)
 
         return {
           thread: thread.email_threads,

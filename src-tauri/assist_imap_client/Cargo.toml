@@ -15,6 +15,7 @@ mail-parser = { version = "0.10.2", features = ["serde_support"] }
 regex = "1.11.1"
 dotenv = "0.15.0"
 tokio = { version = "1.44.1", features = ["full"] }
+chrono = { version = "0.4.40", features = ["serde"] }
 
 [dev-dependencies]
 tokio = { version = "1.44.1", features = ["full", "macros"] }

@@ -55,7 +55,7 @@ export default function GenerateEmbeddingsOptimizedSection() {
     setStatus(`Processing batch ${startIndex + 1}-${endIndex} of ${emails.length}...`)
 
     // Extract text bodies for embedding or use custom text
-    const textsToEmbed = useCustomText && customText ? Array(batch.length).fill(customText) : batch.map((email) => removeQuotedText(email.text_body || ''))
+    const textsToEmbed = useCustomText && customText ? Array(batch.length).fill(customText) : batch.map((email) => removeQuotedText(email.textBody || ''))
 
     console.log(textsToEmbed)
 

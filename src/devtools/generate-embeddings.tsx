@@ -270,7 +270,7 @@ export default function GenerateEmbeddingsSection() {
                               {batch.emails.map((email, emailIndex) => (
                                 <div key={emailIndex} className="p-2 border-t border-gray-200 dark:border-gray-700 text-xs">
                                   <div className="font-medium">Email #{emailIndex + 1}</div>
-                                  <pre className="whitespace-pre-wrap mt-1 text-xs overflow-x-auto">{email.text_body || '(No text body)'}</pre>
+                                  <pre className="whitespace-pre-wrap mt-1 text-xs overflow-x-auto">{email.textBody || '(No text body)'}</pre>
                                 </div>
                               ))}
                             </div>

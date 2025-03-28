@@ -8,15 +8,15 @@ export const indentUserText = (text: string): string => {
 }
 
 export const messageAsText = (message: EmailMessage) => {
-  return `*At ${message.date} ${message.from} wrote:*
-${indentUserText(message.text_body)}`
+  return `*At ${new Date(message.sentAt * 1000).toUTCString()} ${message.fromAddress} wrote:*
+${indentUserText(message.textBody)}`
 }
 
 export const threadAsText = (thread: EmailThread, messages: EmailMessage[]) => {
   return `
 Type: Email Thread
 Subject: ${thread.subject}
-Date: ${thread.date}
+Timespan: ${new Date(thread.firstMessageAt * 1000).toUTCString()} - ${new Date(thread.lastMessageAt * 1000).toUTCString()}
 Messages:
 
 ${messages.map((message) => messageAsText(message)).join('\n\n')}

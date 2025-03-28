@@ -1,3 +1,4 @@
+import { EmailMessage } from '@/types'
 import { invoke } from '@tauri-apps/api/core'
 
 /**
@@ -70,5 +71,46 @@ export default class ImapClient {
    */
   async fetchInbox(mailbox: string = 'INBOX', startIndex?: number, count?: number): Promise<any[]> {
     return await invoke<any[]>('fetch_inbox', { mailbox, startIndex, count })
+  }
+  /**
+   * **fetchMessages**
+   *
+   * Fetches messages from a specific mailbox.
+   *
+   * @param mailbox - The mailbox to fetch messages from
+   * @param startIndex - Optional starting index for fetching messages
+   * @param count - Optional number of messages to fetch
+   * @returns An object containing the messages, current index, and total message count
+   *
+   * @example
+   * ```ts
+   * const result = await ImapClient.fetchMessages("INBOX", 1, 10);
+   * console.log(`Fetched ${result.messages.length} of ${result.total} messages`);
+   * ```
+   */
+  async fetchMessages(
+    mailbox: string,
+    startIndex?: number,
+    count?: number
+  ): Promise<{
+    index: number
+    total: number
+    messages: Omit<EmailMessage, 'id'>[]
+  }> {
+    const result = await invoke<{
+      index: number
+      total: number
+      messages: any[]
+    }>('fetch_messages', { mailbox, startIndex, count })
+
+    return {
+      ...result,
+      messages: result.messages.map((message) => ({
+        ...message,
+        fromContactId: null,
+        toContactId: null,
+        parts: message.parts || {},
+      })),
+    }
   }
 }

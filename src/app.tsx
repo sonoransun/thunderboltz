@@ -37,7 +37,6 @@ const init = async (): Promise<InitData> => {
   const { db, sqlite } = await initializeDrizzleDatabase(`${appDataDirPath}/local.db`)
 
   await migrate({ sqlite })
-  console.log('Recreating embeddings index')
 
   const settings = (await getSettings<SettingsType>(db, 'main')) || {}
 

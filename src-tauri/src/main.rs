@@ -189,6 +189,32 @@ async fn fetch_inbox(
 }
 
 #[command]
+async fn fetch_messages(
+    app_handle: tauri::AppHandle,
+    mailbox: String,
+    start_index: Option<usize>,
+    count: Option<usize>,
+) -> Result<serde_json::Value, String> {
+    // Access state directly
+    let state = app_handle.state::<Mutex<AppState>>();
+    let state_guard = state.lock().await;
+
+    // Get IMAP client
+    let imap_client = state_guard
+        .imap_client
+        .as_ref()
+        .ok_or_else(|| "IMAP client not initialized. Call init_imap first.".to_string())?;
+
+    // Fetch messages from specified mailbox
+    let messages = imap_client
+        .fetch_messages(&mailbox, start_index, count)
+        .map_err(|e| format!("Failed to fetch messages from {}: {}", mailbox, e))?;
+
+    // Convert the messages to a JSON value
+    serde_json::to_value(&messages).map_err(|e| format!("Failed to serialize messages: {}", e))
+}
+
+#[command]
 async fn sync_mailbox(
     app_handle: tauri::AppHandle,
     mailbox: String,
@@ -254,6 +280,7 @@ async fn main() -> Result<()> {
             init_imap,
             init_imap_sync,
             fetch_inbox,
+            fetch_messages,
             list_mailboxes,
             sync_mailbox,
             embedding::generate_embeddings,

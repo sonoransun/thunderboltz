@@ -228,6 +228,7 @@ name = "assist_imap_client"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "dotenv",
  "imap",
  "mail-parser",

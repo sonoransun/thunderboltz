@@ -35,7 +35,7 @@ export default function GenerateThreadsSection() {
         const processedEmails = await db
           .select({ count: count() })
           .from(emailMessagesTable)
-          .where(sql`${emailMessagesTable.email_thread_id} IS NOT NULL`)
+          .where(sql`${emailMessagesTable.emailThreadId} IS NOT NULL`)
           .get()
 
         setProgress({
@@ -76,7 +76,7 @@ export default function GenerateThreadsSection() {
           const processedEmails = await db
             .select({ count: count() })
             .from(emailMessagesTable)
-            .where(sql`${emailMessagesTable.email_thread_id} IS NOT NULL`)
+            .where(sql`${emailMessagesTable.emailThreadId} IS NOT NULL`)
             .get()
 
           setProgress({
@@ -141,7 +141,7 @@ export default function GenerateThreadsSection() {
       const processedEmails = await db
         .select({ count: count() })
         .from(emailMessagesTable)
-        .where(sql`${emailMessagesTable.email_thread_id} IS NOT NULL`)
+        .where(sql`${emailMessagesTable.emailThreadId} IS NOT NULL`)
         .get()
 
       setProgress({

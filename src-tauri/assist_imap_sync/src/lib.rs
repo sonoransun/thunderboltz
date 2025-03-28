@@ -45,17 +45,17 @@ impl ImapSync {
             serde_json::to_string(&message).context("Failed to serialize message parts")?;
 
         // Extract date
-        let date = Self::extract_date(message);
+        let sent_at = Self::extract_sent_at(message);
 
-        // Extract from and in_reply_to
-        let from = Self::extract_from(message).context("Failed to extract from field")?;
+        // Extract from address and in_reply_to
+        let from_address = Self::extract_from(message).context("Failed to extract from field")?;
         let in_reply_to = Self::extract_in_reply_to(message);
 
         // Insert into database
         let query = r#"
-            INSERT INTO email_messages (id, message_id, html_body, text_body, parts, subject, date, "from", in_reply_to)
+            INSERT INTO email_messages (id, imap_id, html_body, text_body, parts, subject, sent_at, from_address, in_reply_to)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT (message_id) DO NOTHING
+            ON CONFLICT (imap_id) DO NOTHING
         "#;
 
         // Use proper libsql parameter types
@@ -66,8 +66,8 @@ impl ImapSync {
             libsql::Value::Text(cleaned_text_body),
             libsql::Value::Text(parts_json),
             libsql::Value::Text(subject.unwrap_or_default()),
-            libsql::Value::Text(date),
-            libsql::Value::Text(from),
+            libsql::Value::Integer(sent_at),
+            libsql::Value::Text(from_address),
             if let Some(reply_to) = in_reply_to {
                 libsql::Value::Text(reply_to)
             } else {
@@ -105,34 +105,139 @@ impl ImapSync {
             .fetch_inbox(mailbox, Some(start_index), Some(count))
             .with_context(|| format!("Failed to fetch messages from {}", mailbox))?;
 
-        println!("Retrieved {} messages", messages.len());
+        let messages_count = messages.len();
+        println!("Retrieved {} messages", messages_count);
+
+        // Convert the messages to JSON
+        let json_messages: Vec<serde_json::Value> = messages
+            .into_iter()
+            .map(|msg| assist_imap_client::message_to_json_value(&msg))
+            .filter_map(Result::ok)
+            .collect();
+
+        println!("Converted {} messages to JSON", json_messages.len());
 
         // Filter out messages that are older than the since date
-        let messages = if let Some(since_date) = since {
-            messages
+        let filtered_messages = if let Some(since_date) = since {
+            json_messages
                 .into_iter()
-                .filter(|message| {
-                    if let Some(message_date) = Self::parse_message_date(message) {
-                        message_date >= since_date
+                .filter(|json_message| {
+                    if let Some(sent_at) = json_message.get("sent_at").and_then(|v| v.as_i64()) {
+                        let message_date = Utc.timestamp_opt(sent_at, 0).single();
+                        if let Some(date) = message_date {
+                            date >= since_date
+                        } else {
+                            true // Keep messages with invalid dates
+                        }
                     } else {
                         true // Keep messages with no date
                     }
                 })
                 .collect::<Vec<_>>()
         } else {
-            messages
+            json_messages
         };
 
-        println!("After filtering: {} messages to process", messages.len());
+        println!(
+            "After filtering: {} messages to process",
+            filtered_messages.len()
+        );
 
         // Check if we retrieved any messages
-        let has_more_messages = messages.len() == count;
+        let has_more_messages = messages_count == count;
         let mut saved_count = 0;
 
         // Process each message
-        for message in messages {
-            // Save the message
-            if let Err(e) = self.save_message(&message).await {
+        for json_message in filtered_messages {
+            // Generate a UUID v7
+            let id = Uuid::now_v7().to_string();
+
+            // Extract values from JSON
+            let imap_id = json_message
+                .get("imap_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown")
+                .to_string();
+
+            let html_body = json_message
+                .get("html_body")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+
+            let _text_body = json_message
+                .get("text_body")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+
+            let cleaned_text_body = json_message
+                .get("clean_text")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+
+            let parts_json = serde_json::to_string(
+                json_message
+                    .get("parts")
+                    .unwrap_or(&serde_json::Value::Null),
+            )
+            .unwrap_or_else(|_| "{}".to_string());
+
+            let subject = json_message
+                .get("subject")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+
+            let sent_at = json_message
+                .get("sent_at")
+                .and_then(|v| v.as_i64())
+                .unwrap_or_else(|| Utc::now().timestamp());
+
+            let from_address = json_message
+                .get("from_address")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+
+            let in_reply_to = json_message
+                .get("in_reply_to")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+
+            // Insert into database
+            let query = r#"
+                INSERT INTO email_messages (id, imap_id, html_body, text_body, parts, subject, sent_at, from_address, in_reply_to)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (imap_id) DO NOTHING
+            "#;
+
+            // Use proper libsql parameter types
+            let params = vec![
+                libsql::Value::Text(id),
+                libsql::Value::Text(imap_id),
+                libsql::Value::Text(html_body),
+                libsql::Value::Text(cleaned_text_body),
+                libsql::Value::Text(parts_json),
+                libsql::Value::Text(subject.unwrap_or_default()),
+                libsql::Value::Integer(sent_at),
+                libsql::Value::Text(from_address),
+                if let Some(reply_to) = in_reply_to {
+                    libsql::Value::Text(reply_to)
+                } else {
+                    libsql::Value::Null
+                },
+            ];
+
+            let result = self.db_conn.execute(query, params).await;
+
+            // If there's a unique constraint error, we just ignore it
+            if let Err(e) = &result {
+                if e.to_string().contains("UNIQUE constraint failed") {
+                    saved_count += 1;
+                    continue;
+                }
+
                 // Log error but continue with other messages
                 eprintln!("Error saving message: {}", e);
                 continue;
@@ -250,19 +355,17 @@ impl ImapSync {
         (html_body, text_body)
     }
 
-    fn extract_date(message: &Message<'_>) -> String {
-        message
-            .date()
-            .map(|d| d.to_rfc3339())
-            .unwrap_or_else(|| Utc::now().to_rfc3339())
+    fn extract_sent_at(message: &Message<'_>) -> i64 {
+        Self::parse_message_date(message)
+            .map(|dt| dt.timestamp())
+            .unwrap_or_else(|| Utc::now().timestamp())
     }
 
     fn extract_from(message: &Message<'_>) -> Result<String> {
         if let Some(addresses) = message.from() {
             if let Some(addr) = addresses.first() {
-                let name = addr.name().unwrap_or_default();
                 let email = addr.address().unwrap_or_default();
-                return Ok(format!("{} <{}>", name, email));
+                return Ok(email.to_string());
             }
         }
         Err(anyhow::anyhow!("From field not found"))
