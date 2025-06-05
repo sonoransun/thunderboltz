@@ -5,7 +5,6 @@ pub mod libsql;
 pub mod settings;
 pub mod state;
 
-use anyhow::Result;
 use tauri::{Manager};
 use tokio::sync::Mutex;
 use crate::state::AppState;

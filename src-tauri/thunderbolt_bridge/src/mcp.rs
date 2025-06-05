@@ -297,7 +297,7 @@ pub async fn run_server(config: Arc<RwLock<BridgeConfig>>) -> BridgeResult<()> {
     let addr = config.read().await.mcp_addr;
     
     // Create channel for bridge communication
-    let (bridge_tx, bridge_rx) = mpsc::unbounded_channel::<BridgeMessage>();
+    let (_bridge_tx, bridge_rx) = mpsc::unbounded_channel::<BridgeMessage>();
     
     // Store channel for bridge access
     {

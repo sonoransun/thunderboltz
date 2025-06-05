@@ -3,7 +3,6 @@ use thunderbolt_imap_client::{messages_to_json_values, ImapClient, ImapCredentia
 use thunderbolt_imap_sync::ImapSync;
 use chrono::{DateTime, Utc};
 use serde_json;
-use std::env;
 use tauri::{command, Manager};
 use tokio::sync::Mutex;
 

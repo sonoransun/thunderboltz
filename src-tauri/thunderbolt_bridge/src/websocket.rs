@@ -31,7 +31,7 @@ pub enum ThunderbirdMessage {
 }
 
 pub struct WebSocketConnection {
-    id: Uuid,
+    _id: Uuid,
     tx: mpsc::UnboundedSender<Message>,
 }
 
@@ -59,7 +59,7 @@ impl WebSocketServer {
         tracing::info!("✅ WebSocket handshake completed for connection: {}", conn_id);
         
         let (tx, rx) = mpsc::unbounded_channel();
-        let connection = WebSocketConnection { id: conn_id, tx };
+        let connection = WebSocketConnection { _id: conn_id, tx };
         
         self.connections.insert(conn_id, connection);
         
