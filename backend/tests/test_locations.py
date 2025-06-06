@@ -1,9 +1,9 @@
 """Tests for locations search endpoint."""
 
-import pytest
+from unittest.mock import MagicMock, patch
+
 import httpx
 from fastapi.testclient import TestClient
-from unittest.mock import patch, MagicMock
 
 
 class TestLocationsEndpoint:
