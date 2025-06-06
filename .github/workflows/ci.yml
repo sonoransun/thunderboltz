@@ -17,6 +17,7 @@ jobs:
         with:
           toolchain: nightly
           components: rustfmt, clippy
+          cache: false
 
       - name: Install system dependencies
         run: |
@@ -95,26 +96,32 @@ jobs:
       - name: Install dependencies
         run: |
           cd backend
+          uv venv
+          source .venv/bin/activate
           uv pip install -e ".[dev]"
 
       - name: Lint
         run: |
           cd backend
+          source .venv/bin/activate
           ruff check .
 
       - name: Format check
         run: |
           cd backend
+          source .venv/bin/activate
           ruff format --check .
 
       - name: Type check
         run: |
           cd backend
+          source .venv/bin/activate
           mypy .
 
       - name: Test
         run: |
           cd backend
+          source .venv/bin/activate
           pytest --cov=thunderbolt --cov-report=xml
 
       - name: Upload coverage to Codecov
