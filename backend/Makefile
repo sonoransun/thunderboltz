@@ -1,4 +1,4 @@
-.PHONY: help install install-dev format lint type-check test test-cov run docker-build docker-run clean
+.PHONY: help install install-dev format lint type-check test test-cov check run docker-build docker-run clean
 
 # Default target
 help:
@@ -11,6 +11,7 @@ help:
 	@echo "  make type-check    - Run type checking with ty"
 	@echo "  make test          - Run tests"
 	@echo "  make test-cov      - Run tests with coverage"
+	@echo "  make check         - Run all checks (format, lint, type-check, test)"
 	@echo "  make run           - Run the development server"
 	@echo "  make docker-build  - Build Docker image"
 	@echo "  make docker-run    - Run Docker container"
@@ -48,6 +49,10 @@ test:
 # Run tests with coverage
 test-cov:
 	uv run pytest --cov
+
+# Run all checks in sequence
+check: format-check lint type-check test
+	@echo "All checks passed!"
 
 # Run development server
 run:
