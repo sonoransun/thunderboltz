@@ -186,12 +186,6 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
-      - name: upload assets to CrabNebula
-        uses: crabnebula-dev/cloud-release@v0
-        with:
-          command: release upload ${{ vars.CN_APPLICATION }} --framework tauri
-          api-key: ${{ secrets.CN_API_KEY }}
-
       - name: Upload Linux artifacts to GitHub Release
         if: matrix.os == 'ubuntu-22.04'
         uses: softprops/action-gh-release@v1
@@ -226,6 +220,12 @@ jobs:
             src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app.tar.gz
             src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
             src-tauri/target/x86_64-apple-darwin/release/bundle/macos/*.app.tar.gz
+
+      - name: upload assets to CrabNebula
+        uses: crabnebula-dev/cloud-release@v0
+        with:
+          command: release upload ${{ vars.CN_APPLICATION }} --framework tauri
+          api-key: ${{ secrets.CN_API_KEY }}
 
   build_android:
     needs: draft
@@ -385,12 +385,6 @@ jobs:
           echo "rc_version=$RC_VERSION" >> $GITHUB_OUTPUT
           echo "final_version=$FINAL_VERSION" >> $GITHUB_OUTPUT
 
-      - name: publish release to CrabNebula
-        uses: crabnebula-dev/cloud-release@v0
-        with:
-          command: release publish ${{ vars.CN_APPLICATION }} --framework tauri
-          api-key: ${{ secrets.CN_API_KEY }}
-
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v1
         with:
@@ -423,3 +417,9 @@ jobs:
             git tag ${{ steps.get-version.outputs.final_version }}
             git push origin ${{ steps.get-version.outputs.final_version }}
             ```
+
+      - name: publish release to CrabNebula
+        uses: crabnebula-dev/cloud-release@v0
+        with:
+          command: release publish ${{ vars.CN_APPLICATION }} --framework tauri
+          api-key: ${{ secrets.CN_API_KEY }}
