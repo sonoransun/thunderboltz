@@ -1,3 +1,15 @@
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
+import { Button } from '@/components/ui/button'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router'
 
@@ -26,7 +38,7 @@ import DevToolsPage from './devtools'
 import ImapClient from './imap/imap'
 import { ImapProvider } from './imap/provider'
 import Layout from './layout'
-import { createAppDataDir } from './lib/fs'
+import { createAppDir, resetAppDir } from './lib/fs'
 import { MCPProvider } from './lib/mcp-provider'
 import { getDatabasePath, getDatabaseType } from './lib/platform'
 import { TrayManager, TrayProvider } from './lib/tray'
@@ -77,9 +89,9 @@ function AppContent({ initData }: { initData: InitData }) {
 }
 
 const init = async (): Promise<InitData> => {
-  const appDataDirPath = await createAppDataDir()
+  const appDirPath = await createAppDir()
   const databaseType = await getDatabaseType()
-  const dbPath = await getDatabasePath(databaseType, appDataDirPath)
+  const dbPath = await getDatabasePath(databaseType, appDirPath)
 
   const db = await DatabaseSingleton.instance.initialize({
     type: databaseType,
@@ -145,6 +157,7 @@ const init = async (): Promise<InitData> => {
 export const App = () => {
   const [initData, setInitData] = useState<InitData>()
   const [initError, setInitError] = useState<Error>()
+  const [isClearingDatabase, setIsClearingDatabase] = useState(false)
 
   useEffect(() => {
     init()
@@ -155,11 +168,49 @@ export const App = () => {
       })
   }, [])
 
+  const handleClearDatabase = async () => {
+    setIsClearingDatabase(true)
+    try {
+      await resetAppDir()
+      const newInitData = await init()
+      setInitData(newInitData)
+    } finally {
+      setIsClearingDatabase(false)
+    }
+  }
+
   if (initError) {
     return (
       <div className="flex flex-col items-center justify-center w-full h-[100vh] p-4">
         <div className="text-red-500 text-center mb-4">Failed to initialize app</div>
-        <div className="text-sm text-gray-500 text-center">{initError.message}</div>
+        <div className="text-sm text-gray-500 text-center mb-6">{initError.message}</div>
+
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button variant="destructive" disabled={isClearingDatabase}>
+              {isClearingDatabase ? 'Clearing Database...' : 'Clear Local Database'}
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Clear Local Database?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Unfortuantely, the local database encountered an error while being migrated to the latest version of
+                this app. Deleting your local data will resolve the issue but you will lose your settings and chat
+                history.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleClearDatabase}
+                className="bg-destructive text-white hover:bg-destructive/90"
+              >
+                Clear Database
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     )
   }

@@ -1,4 +1,5 @@
-import { isTauri } from './platform'
+import { DatabaseSingleton } from '@/db/singleton'
+import { getDatabasePath, getDatabaseType, isOpfsAvailable, isTauri } from './platform'
 
 // Only import Tauri APIs when in Tauri environment
 let tauriPath: any = null
@@ -16,25 +17,87 @@ const loadTauriModules = async () => {
   }
 }
 
-export const createAppDataDir = async (): Promise<string> => {
+/**
+ * Creates app data directory in Tauri environment using file system
+ */
+const createAppDirTauri = async (): Promise<string> => {
+  await loadTauriModules()
+
+  if (!tauriPath || !tauriFs) {
+    throw new Error('Failed to load Tauri filesystem modules')
+  }
+
+  const appDataDirPath = await tauriPath.appDataDir()
+
+  await tauriFs.mkdir('data', { recursive: true, baseDir: tauriPath.BaseDirectory.AppData })
+  console.log('App data directory initialized:', appDataDirPath)
+
+  return appDataDirPath
+}
+
+/**
+ * Creates app data directory in web environment using virtual path for OPFS
+ */
+const createAppDirOpfs = async (): Promise<string> => {
+  const virtualPath = 'app-data'
+  console.log('Web environment - using virtual app data path:', virtualPath)
+  return virtualPath
+}
+
+/**
+ * Creates app data directory, branching based on platform
+ */
+export const createAppDir = async (): Promise<string> => {
   if (isTauri()) {
-    // Tauri environment - use file system
-    await loadTauriModules()
-
-    if (!tauriPath || !tauriFs) {
-      throw new Error('Failed to load Tauri filesystem modules')
-    }
-
-    const appDataDirPath = await tauriPath.appDataDir()
-
-    await tauriFs.mkdir('data', { recursive: true, baseDir: tauriPath.BaseDirectory.AppData })
-    console.log('App data directory initialized:', appDataDirPath)
-
-    return appDataDirPath
+    return await createAppDirTauri()
   } else {
-    // Web environment - use a virtual path for OPFS (SQLocal)
-    const virtualPath = '/app-data'
-    console.log('Web environment - using virtual app data path:', virtualPath)
-    return virtualPath
+    return await createAppDirOpfs()
+  }
+}
+
+/**
+ * Resets app data directory in Tauri environment by deleting and recreating
+ */
+const resetAppDirTauri = async (): Promise<void> => {
+  const appDataDirPath = await createAppDirTauri()
+  const { remove } = await import('@tauri-apps/plugin-fs')
+  await remove(appDataDirPath, { recursive: true })
+}
+
+/**
+ * Resets app data directory in web environment using OPFS
+ */
+const resetAppDirOpfs = async (): Promise<void> => {
+  if (!(await isOpfsAvailable())) {
+    throw new Error('OPFS is not available')
+  }
+
+  const appDataDirPath = await createAppDirOpfs()
+  const root = await navigator.storage.getDirectory()
+
+  await root.removeEntry(appDataDirPath, { recursive: true })
+  await root.getDirectoryHandle(appDataDirPath, { create: true })
+}
+
+/**
+ * Resets the data directory by deleting the database file and recreating the directory
+ */
+export const resetAppDir = async (): Promise<void> => {
+  DatabaseSingleton.reset()
+
+  const appDataDirPath = await createAppDir()
+  const databaseType = await getDatabaseType()
+  const dbPath = await getDatabasePath(databaseType, appDataDirPath)
+
+  // Only delete file if it's not an in-memory database
+  if (dbPath === ':memory:') {
+    console.log('In-memory database detected, no file to delete')
+    return
+  }
+
+  if (isTauri()) {
+    await resetAppDirTauri()
+  } else {
+    await resetAppDirOpfs()
   }
 }
