@@ -10,7 +10,7 @@ interface PromptInputProps {
   onChange: (value: string) => void
   placeholder?: string
   models: Model[]
-  selectedModel: string | null
+  selectedModelId?: string
   onModelChange: (model: string | null) => void
   showSubmitButton?: boolean
   onSubmit?: () => void
@@ -34,7 +34,7 @@ export const PromptInput = forwardRef<HTMLFormElement, PromptInputProps>(
       onChange,
       placeholder = 'Say something...',
       models,
-      selectedModel,
+      selectedModelId,
       onModelChange,
       showSubmitButton = true,
       onSubmit,
@@ -79,7 +79,7 @@ export const PromptInput = forwardRef<HTMLFormElement, PromptInputProps>(
         />
 
         <div className="flex gap-2 justify-end items-center w-full">
-          <Select value={selectedModel || ''} onValueChange={onModelChange}>
+          <Select value={selectedModelId} onValueChange={onModelChange}>
             <SelectTrigger className="rounded-full" size="sm">
               <SelectValue placeholder="Select a model" />
             </SelectTrigger>

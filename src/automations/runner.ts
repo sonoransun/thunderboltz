@@ -1,6 +1,7 @@
 import { DatabaseSingleton } from '@/db/singleton'
 import { chatMessagesTable, chatThreadsTable, modelsTable, promptsTable } from '@/db/tables'
 import { convertUIMessageToDbChatMessage } from '@/lib/utils'
+import type { UIMessage } from 'ai'
 import { eq } from 'drizzle-orm'
 import { v7 as uuidv7 } from 'uuid'
 
@@ -20,20 +21,21 @@ export const runAutomation = async (promptId: string, navigate?: Navigate) => {
   if (!model) throw new Error('Model not found')
 
   const threadId = uuidv7()
+
   await db.insert(chatThreadsTable).values({
     id: threadId,
     title: prompt.title ?? 'Automation',
     triggeredBy: prompt.id,
   })
 
-  const userMsg = {
+  const userMessage: UIMessage = {
     id: uuidv7(),
-    role: 'user' as const,
-    content: prompt.prompt,
-    parts: [{ type: 'text' as const, text: prompt.prompt }],
+    role: 'user',
+    metadata: { modelId: model.id },
+    parts: [{ type: 'text', text: prompt.prompt }],
   }
 
-  await db.insert(chatMessagesTable).values(convertUIMessageToDbChatMessage(userMsg, threadId))
+  await db.insert(chatMessagesTable).values(convertUIMessageToDbChatMessage(userMessage, threadId))
 
   navigate?.(`/chats/${threadId}`)
 }

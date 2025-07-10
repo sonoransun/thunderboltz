@@ -7,9 +7,10 @@ import {
   emailMessagesTable,
   emailThreadsTable,
   modelsTable,
+  promptsTable,
   settingsTable,
 } from '../db/tables'
-import { EmailThreadWithMessagesAndAddresses, type Model } from '../types'
+import { EmailThreadWithMessagesAndAddresses, type Model, type Prompt } from '../types'
 
 /**
  * Gets the currently selected model or falls back to the system default model
@@ -40,6 +41,39 @@ export const getSelectedModel = async (): Promise<Model> => {
   }
 
   return systemModel
+}
+
+/**
+ * Gets the default model for a chat thread based on the last message in the thread, falling back to the selected_model setting.
+ * @param threadId The ID of the chat thread
+ * @returns The default model for the chat thread
+ */
+export const getDefaultModelForThread = async (threadId: string, fallbackModelId?: string): Promise<Model> => {
+  const db = DatabaseSingleton.instance.db
+
+  const thread = await db.query.chatMessagesTable.findFirst({
+    where: eq(chatMessagesTable.chatThreadId, threadId),
+    orderBy: desc(chatMessagesTable.id),
+    with: {
+      model: true,
+    },
+  })
+
+  if (thread?.model) {
+    return thread.model
+  }
+
+  if (fallbackModelId) {
+    const model = await db.query.modelsTable.findFirst({
+      where: eq(modelsTable.id, fallbackModelId),
+    })
+
+    if (model) {
+      return model
+    }
+  }
+
+  return await getSelectedModel()
 }
 
 /**
@@ -162,10 +196,10 @@ export const getEmailThreadByMessageIdWithMessages = async (
  * @param key The setting key to retrieve
  * @returns The setting value or null if not found
  */
-export const getSetting = async (key: string, defaultValue: string | null = null): Promise<string | null> => {
+export const getSetting = async <T = string>(key: string, defaultValue: T | null = null): Promise<T | null> => {
   const db = DatabaseSingleton.instance.db
   const setting = await db.select().from(settingsTable).where(eq(settingsTable.key, key)).get()
-  return setting?.value || defaultValue
+  return (setting?.value as T) || defaultValue
 }
 
 /**
@@ -184,7 +218,7 @@ export const getBooleanSetting = async (key: string, defaultValue: boolean = fal
  * @param key The setting key to update
  * @param value The new value for the setting
  */
-export const updateSetting = async (key: string, value: string): Promise<void> => {
+export const updateSetting = async (key: string, value: string | null): Promise<void> => {
   const db = DatabaseSingleton.instance.db
   await db.insert(settingsTable).values({ key, value }).onConflictDoUpdate({
     target: settingsTable.key,
@@ -199,4 +233,24 @@ export const updateSetting = async (key: string, value: string): Promise<void> =
 export const getAvailableModels = async (): Promise<Model[]> => {
   const db = DatabaseSingleton.instance.db
   return await db.select().from(modelsTable).where(eq(modelsTable.enabled, 1))
+}
+
+/**
+ * Returns the automation prompt that triggered a chat thread, if any.
+ *
+ * @param threadId - The ID of the chat thread
+ * @returns The automation prompt's title and prompt text, or null if the thread was not triggered by an automation.
+ */
+export const getTriggerPromptForThread = async (threadId: string): Promise<Prompt | null> => {
+  const db = DatabaseSingleton.instance.db
+
+  // Fetch the associated prompt in a single query via join
+  const result = await db
+    .select({ prompt: promptsTable })
+    .from(chatThreadsTable)
+    .leftJoin(promptsTable, eq(chatThreadsTable.triggeredBy, promptsTable.id))
+    .where(eq(chatThreadsTable.id, threadId))
+    .get()
+
+  return result?.prompt ?? null
 }

@@ -299,7 +299,7 @@ export default function AutomationFormModal({
                   onChange={handlePromptChange}
                   placeholder="Enter your prompt here..."
                   models={models}
-                  selectedModel={modelId}
+                  selectedModelId={modelId ?? undefined}
                   onModelChange={handleModelChange}
                   showSubmitButton={false}
                   noForm

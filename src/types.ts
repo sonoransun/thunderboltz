@@ -69,6 +69,10 @@ export type McpServer = InferSelectModel<typeof mcpServersTable>
 export type Prompt = InferSelectModel<typeof promptsTable>
 export type Trigger = InferSelectModel<typeof triggersTable>
 
+export type UIMessageMetadata = {
+  modelId?: string
+}
+
 export type EmailMessageWithAddresses = EmailMessage & {
   sender: EmailAddress
   recipients: (EmailMessageToAddress & {

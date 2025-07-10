@@ -42,6 +42,7 @@ export const chatMessagesTable = sqliteTable('chat_messages', {
   chatThreadId: text('chat_thread_id')
     .notNull()
     .references(() => chatThreadsTable.id, { onDelete: 'cascade', onUpdate: 'cascade' }),
+  modelId: text('model_id').references(() => modelsTable.id),
 })
 
 export const contactsTable = sqliteTable('contacts', {

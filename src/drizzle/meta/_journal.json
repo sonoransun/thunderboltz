@@ -15,6 +15,13 @@
       "when": 1751499613542,
       "tag": "0001_shocking_mac_gargan",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1752170934798,
+      "tag": "0002_zippy_squadron_sinister",
+      "breakpoints": true
     }
   ]
 }

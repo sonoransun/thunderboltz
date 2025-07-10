@@ -1,7 +1,7 @@
 import { useAutoScroll } from '@/hooks/use-auto-scroll'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { cn } from '@/lib/utils'
-import { Model } from '@/types'
+import { Model, type Prompt } from '@/types'
 import type { UseChatHelpers } from '@ai-sdk/react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Check, Loader2 } from 'lucide-react'
@@ -17,13 +17,9 @@ import { TriggerMessage } from './trigger-message'
 interface ChatUIProps {
   chatHelpers: UseChatHelpers
   models: Model[]
-  selectedModel: string | null
+  selectedModelId?: string
   onModelChange: (model: string | null) => void
-  /** Details of the automation prompt that triggered this chat, if any */
-  triggerPrompt?: {
-    title: string | null
-    prompt: string
-  } | null
+  triggerPrompt?: Prompt
 }
 
 interface SuggestionButtonProps {
@@ -65,7 +61,7 @@ const SuggestionButtons = ({ onSelectPrompt }: { onSelectPrompt: (prompt: string
   )
 }
 
-export default function ChatUI({ chatHelpers, models, selectedModel, onModelChange, triggerPrompt }: ChatUIProps) {
+export default function ChatUI({ chatHelpers, models, selectedModelId, onModelChange, triggerPrompt }: ChatUIProps) {
   const [hasMessages, setHasMessages] = useState(chatHelpers.messages.length > 0)
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false)
   const formRef = useRef<HTMLFormElement>(null)
@@ -310,7 +306,7 @@ export default function ChatUI({ chatHelpers, models, selectedModel, onModelChan
               onChange={(value: string) => chatHelpers.setInput(value)}
               placeholder="Say something..."
               models={models}
-              selectedModel={selectedModel}
+              selectedModelId={selectedModelId}
               onModelChange={onModelChange}
               showSubmitButton
               onSubmit={handleSubmit}

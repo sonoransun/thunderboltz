@@ -18,5 +18,10 @@ export const migrations: Migration[] = [
     "hash": "0001_shocking_mac_gargan",
     "name": "0001_shocking_mac_gargan.sql",
     "sql": "CREATE TABLE `prompts` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`title` text,\n\t`prompt` text NOT NULL,\n\t`model_id` text NOT NULL,\n\tFOREIGN KEY (`model_id`) REFERENCES `models`(`id`) ON UPDATE cascade ON DELETE cascade\n);\n--> statement-breakpoint\nCREATE UNIQUE INDEX `prompts_id_unique` ON `prompts` (`id`);--> statement-breakpoint\nCREATE TABLE `triggers` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`trigger_type` text NOT NULL,\n\t`trigger_time` text,\n\t`prompt_id` text NOT NULL,\n\t`is_enabled` integer DEFAULT 1 NOT NULL,\n\tFOREIGN KEY (`prompt_id`) REFERENCES `prompts`(`id`) ON UPDATE cascade ON DELETE cascade\n);\n--> statement-breakpoint\nCREATE UNIQUE INDEX `triggers_id_unique` ON `triggers` (`id`);--> statement-breakpoint\nALTER TABLE `chat_threads` ADD `triggered_by` text REFERENCES prompts(id);"
+  },
+  {
+    "hash": "0002_zippy_squadron_sinister",
+    "name": "0002_zippy_squadron_sinister.sql",
+    "sql": "ALTER TABLE `chat_messages` ADD `model_id` text REFERENCES models(id);"
   }
 ];

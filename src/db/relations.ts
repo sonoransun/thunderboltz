@@ -22,6 +22,10 @@ export const chatMessagesRelations = relations(chatMessagesTable, ({ one }) => (
     fields: [chatMessagesTable.chatThreadId],
     references: [chatThreadsTable.id],
   }),
+  model: one(modelsTable, {
+    fields: [chatMessagesTable.modelId],
+    references: [modelsTable.id],
+  }),
 }))
 
 export const embeddingsRelations = relations(embeddingsTable, ({ one }) => ({
@@ -90,4 +94,6 @@ export const tasksRelations = relations(tasksTable, ({ many }) => ({
 
 export const settingsRelations = relations(settingsTable, ({}) => ({}))
 
-export const modelsRelations = relations(modelsTable, ({}) => ({}))
+export const modelsRelations = relations(modelsTable, ({ many }) => ({
+  chatMessages: many(chatMessagesTable),
+}))

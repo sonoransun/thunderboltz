@@ -1,4 +1,4 @@
-import { chatMessagesTable, chatThreadsTable, modelsTable, settingsTable } from '@/db/tables'
+import { chatMessagesTable, chatThreadsTable } from '@/db/tables'
 import { useDatabase } from '@/hooks/use-database'
 import { generateTitle } from '@/lib/title-generator'
 import { convertDbChatMessageToUIMessage, convertUIMessageToDbChatMessage } from '@/lib/utils'
@@ -40,7 +40,11 @@ export default function ChatDetailPage() {
   } = useQuery<UIMessage[], Error>({
     queryKey: ['chatMessages', params.chatThreadId],
     queryFn: async () => {
-      const chatMessages = await db.select().from(chatMessagesTable).where(eq(chatMessagesTable.chatThreadId, params.chatThreadId!)).orderBy(chatMessagesTable.id)
+      const chatMessages = await db
+        .select()
+        .from(chatMessagesTable)
+        .where(eq(chatMessagesTable.chatThreadId, params.chatThreadId!))
+        .orderBy(chatMessagesTable.id)
       return chatMessages.map(convertDbChatMessageToUIMessage)
     },
     enabled: !!params.chatThreadId,
@@ -52,32 +56,15 @@ export default function ChatDetailPage() {
         throw new Error('No chat thread ID')
       }
 
-      const dbChatMessages = messages.map((message) => convertUIMessageToDbChatMessage(message, params.chatThreadId!))
-
+      // Fetch thread info first
       const thread = await db.select().from(chatThreadsTable).where(eq(chatThreadsTable.id, params.chatThreadId!)).get()
 
       if (!thread) {
         throw new Error('Thread not found')
       }
 
-      // Handle encryption for first message with confidential model
-      const existingMessages = await db.select().from(chatMessagesTable).where(eq(chatMessagesTable.chatThreadId, params.chatThreadId!)).limit(1)
-
-      if (existingMessages.length === 0 && !thread.isEncrypted) {
-        const selectedModelId = await db.select().from(settingsTable).where(eq(settingsTable.key, 'selected_model')).get()
-
-        if (selectedModelId) {
-          const model = await db
-            .select()
-            .from(modelsTable)
-            .where(eq(modelsTable.id, selectedModelId.value as string))
-            .get()
-
-          if (model?.isConfidential) {
-            await db.update(chatThreadsTable).set({ isEncrypted: 1 }).where(eq(chatThreadsTable.id, params.chatThreadId!))
-          }
-        }
-      }
+      // Map UI messages to DB messages, using modelId from metadata when available
+      const dbChatMessages = messages.map((message) => convertUIMessageToDbChatMessage(message, params.chatThreadId!))
 
       // Insert messages
       await db
@@ -119,7 +106,12 @@ export default function ChatDetailPage() {
         ) : isError ? (
           <div>Error loading chat</div>
         ) : messages ? (
-          <Chat key={params.chatThreadId} id={params.chatThreadId} initialMessages={messages} saveMessages={saveMessages} />
+          <Chat
+            key={params.chatThreadId}
+            id={params.chatThreadId}
+            initialMessages={messages}
+            saveMessages={saveMessages}
+          />
         ) : (
           <div>Error loading chat</div>
         )}

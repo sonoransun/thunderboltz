@@ -1,5 +1,5 @@
 import { DatabaseSingleton } from '@/db/singleton'
-import { settingsTable } from '@/db/tables'
+import { modelsTable, settingsTable } from '@/db/tables'
 import { Model, SaveMessagesFunction } from '@/types'
 import { createOpenAI } from '@ai-sdk/openai'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
@@ -40,7 +40,7 @@ export const ollama = createOpenAI({
 type AiFetchStreamingResponseOptions = {
   init: RequestInit
   saveMessages: SaveMessagesFunction
-  model: Model
+  modelId: string
   mcpClients?: MCPClient[]
 }
 
@@ -93,7 +93,7 @@ export const createModel = async (modelConfig: Model): Promise<LanguageModel> =>
 export const aiFetchStreamingResponse = async ({
   init,
   saveMessages,
-  model: modelConfig,
+  modelId,
   mcpClients,
 }: AiFetchStreamingResponseOptions) => {
   try {
@@ -104,8 +104,6 @@ export const aiFetchStreamingResponse = async ({
     const { messages, chatId } = body as { messages: UIMessage[]; chatId: string }
 
     await saveMessages({ id: chatId, messages })
-
-    console.log('Using model', modelConfig.provider, modelConfig.model)
 
     const db = DatabaseSingleton.instance.db
 
@@ -118,7 +116,13 @@ export const aiFetchStreamingResponse = async ({
       .where(eq(settingsTable.key, 'preferred_name'))
       .get()
 
-    const supportsTools = modelConfig.toolUsage !== 0
+    const model = await db.query.modelsTable.findFirst({
+      where: eq(modelsTable.id, modelId),
+    })
+
+    if (!model) throw new Error('Model not found')
+
+    const supportsTools = model.toolUsage !== 0
 
     let toolset: ToolSet = {}
     if (supportsTools) {
@@ -160,12 +164,12 @@ export const aiFetchStreamingResponse = async ({
     })
 
     // Flower is a special case that uses a custom SDK that is not compatible with the Vercel AI SDK.
-    if (modelConfig.provider === 'flower') {
-      const tools = modelConfig.toolUsage === 1 ? await getAvailableTools() : undefined
-      return handleFlowerChatStream({ messages, systemPrompt, model: modelConfig.model, tools })
+    if (model.provider === 'flower') {
+      const tools = model.toolUsage === 1 ? await getAvailableTools() : undefined
+      return handleFlowerChatStream({ messages, systemPrompt, model: model.model, tools })
     }
 
-    const baseModel = await createModel(modelConfig)
+    const baseModel = await createModel(model)
 
     const wrappedModel = wrapLanguageModel({
       model: baseModel,
@@ -182,7 +186,11 @@ export const aiFetchStreamingResponse = async ({
       abortSignal,
     })
 
-    return result.toUIMessageStreamResponse({ sendReasoning: true })
+    return result.toUIMessageStreamResponse({
+      sendReasoning: true,
+      // Attach the modelId as metadata so the client knows which model was used
+      messageMetadata: () => ({ modelId }),
+    })
   } catch (error) {
     console.error('Error in aiFetchStreamingResponse:', error)
     throw error

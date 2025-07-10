@@ -1,23 +1,15 @@
 import { aiFetchStreamingResponse } from '@/ai/fetch'
 import ChatUI from '@/components/chat/chat-ui'
-import { chatThreadsTable, modelsTable, promptsTable, settingsTable } from '@/db/tables'
-import { useDatabase } from '@/hooks/use-database'
+import { useSetting } from '@/hooks/use-setting'
 import { getOrCreateChatStore } from '@/lib/chat-store-registry'
-import { getSelectedModel } from '@/lib/dal'
+import { getDefaultModelForThread, getTriggerPromptForThread } from '@/lib/dal'
 import { useMCP } from '@/lib/mcp-provider'
-import { Model, SaveMessagesFunction } from '@/types'
+import { Model, Prompt, SaveMessagesFunction } from '@/types'
 import { useChat } from '@ai-sdk/react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { UIMessage } from 'ai'
-import { eq } from 'drizzle-orm'
-import { useEffect } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { v7 as uuidv7 } from 'uuid'
-
-// Types for optional automation prompt
-type TriggerPromptInfo = {
-  title: string | null
-  prompt: string
-} | null
 
 interface ChatStateProps {
   id: string
@@ -27,40 +19,34 @@ interface ChatStateProps {
 }
 
 export default function ChatState({ id, models, initialMessages, saveMessages }: ChatStateProps) {
-  const queryClient = useQueryClient()
-  const { db } = useDatabase()
   const { getEnabledClients } = useMCP()
 
+  const [defaultModelId, setDefaultModelId] = useSetting<string>('selected_model')
+
+  const [selectedModelId, setSelectedModelId] = useState<string | null>(null)
+
+  const selectedModelIdRef = useRef<string | null>(null)
+
+  // Keep ref in sync with state so fetch always sees latest value
+  useEffect(() => {
+    selectedModelIdRef.current = selectedModelId
+  }, [selectedModelId])
+
   const { data: selectedModel } = useQuery<Model>({
-    queryKey: ['selected_model_for_thread', id],
-    queryFn: async () => {
-      const thread = await db.select().from(chatThreadsTable).where(eq(chatThreadsTable.id, id)).get()
-      if (thread?.triggeredBy) {
-        const prompt = await db.select().from(promptsTable).where(eq(promptsTable.id, thread.triggeredBy)).get()
-        if (prompt?.modelId) {
-          const model = await db.select().from(modelsTable).where(eq(modelsTable.id, prompt.modelId)).get()
-          if (model) return model
-        }
-      }
-      return await getSelectedModel()
-    },
-    initialData: models[0],
+    queryKey: ['defaultModel', id],
+    queryFn: () => getDefaultModelForThread(id, defaultModelId ?? undefined),
   })
 
-  // Fetch automation prompt details (if any) for this thread
-  const { data: triggerPrompt } = useQuery<TriggerPromptInfo>({
-    queryKey: ['trigger_prompt_info', id],
-    queryFn: async () => {
-      const thread = await db.select().from(chatThreadsTable).where(eq(chatThreadsTable.id, id)).get()
-      if (thread?.triggeredBy) {
-        const prompt = await db.select().from(promptsTable).where(eq(promptsTable.id, thread.triggeredBy)).get()
-        if (prompt) {
-          return { title: prompt.title, prompt: prompt.prompt }
-        }
-      }
-      return null
-    },
-  })
+  const handleModelChange = (modelId: string | null) => {
+    setSelectedModelId(modelId)
+    setDefaultModelId(modelId)
+  }
+
+  useEffect(() => {
+    if (selectedModel) {
+      setSelectedModelId(selectedModel.id)
+    }
+  }, [selectedModel])
 
   // Hydrate the singleton store the first time a thread is opened
   useEffect(() => {
@@ -69,33 +55,23 @@ export default function ChatState({ id, models, initialMessages, saveMessages }:
     }
   }, [id, initialMessages])
 
-  const selectModelMutation = useMutation({
-    mutationFn: async (modelId: string) => {
-      await db.delete(settingsTable).where(eq(settingsTable.key, 'selected_model'))
-      await db.insert(settingsTable).values({ key: 'selected_model', value: modelId })
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['selected_model_for_thread', id] })
-    },
-  })
+  // Stable fetch function that always reads the latest model id from the ref
+  const customFetch = useCallback(
+    async (_requestInfo: RequestInfo | URL, init?: RequestInit) => {
+      if (!init) throw new Error('Missing init')
 
-  const handleModelChange = (modelId: string | null) => {
-    if (modelId) {
-      selectModelMutation.mutate(modelId)
-    }
-  }
+      const modelId = selectedModelIdRef.current
+      if (!modelId) throw new Error('No model selected')
 
-  // Memoize fetch function to keep stable reference per render
-  const customFetch = async (_requestInfo: RequestInfo | URL, init?: RequestInit) => {
-    if (!init) throw new Error('Missing init')
-    const model = await getSelectedModel()
-    return aiFetchStreamingResponse({
-      init,
-      saveMessages,
-      model,
-      mcpClients: getEnabledClients(),
-    })
-  }
+      return aiFetchStreamingResponse({
+        init,
+        saveMessages,
+        modelId,
+        mcpClients: getEnabledClients(),
+      })
+    },
+    [getEnabledClients, saveMessages],
+  )
 
   const chatStoreInstance = getOrCreateChatStore(id, {
     initialMessages: initialMessages ?? [],
@@ -120,22 +96,39 @@ export default function ChatState({ id, models, initialMessages, saveMessages }:
 
   const { messages: chatMessages, status } = chatHelpers
 
+  // Load the automation prompt that triggered this chat, if any
+  const { data: triggerPrompt } = useQuery<Prompt | null>({
+    queryKey: ['triggerPrompt', id],
+    queryFn: () => getTriggerPromptForThread(id),
+  })
+
   // Auto-run assistant if thread ends with user message (e.g., automation) and no assistant response yet
   useEffect(() => {
-    if (status === 'ready' && chatMessages.length > 0 && chatMessages[chatMessages.length - 1].role === 'user') {
+    // Ensure we have a model selected before attempting to reload
+    if (
+      selectedModelId &&
+      status === 'ready' &&
+      chatMessages.length > 0 &&
+      chatMessages[chatMessages.length - 1].role === 'user'
+    ) {
       // Trigger LLM response once automatically
       chatHelpers.reload().catch((err) => console.error('Auto reload error', err))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status])
+  }, [status, selectedModelId])
+
+  if (!selectedModelId) {
+    // @todo: show a loading state
+    return null
+  }
 
   return (
     <ChatUI
       chatHelpers={chatHelpers}
       models={models}
-      selectedModel={selectedModel?.id ?? null}
+      selectedModelId={selectedModelId ?? undefined}
       onModelChange={handleModelChange}
-      triggerPrompt={triggerPrompt}
+      triggerPrompt={triggerPrompt ?? undefined}
     />
   )
 }

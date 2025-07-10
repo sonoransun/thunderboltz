@@ -1,13 +1,13 @@
+import { useDatabase } from '@/hooks/use-database'
 import { CheckCircle2, ChevronDown, RefreshCw, Square } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Button } from './components/ui/button'
 import { Skeleton } from './components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './components/ui/tooltip'
-import { useDatabase } from '@/hooks/use-database'
 import { tasksTable } from './db/tables'
+import { useSetting } from './hooks/use-setting'
 import { useImap } from './imap/provider'
 import { refreshTasks } from './lib/tasks'
-import { useSetting } from './settings/hooks'
 import { useSideview } from './sideview/provider'
 
 export default function WelcomePage() {
@@ -20,8 +20,10 @@ export default function WelcomePage() {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [showAllTasks, setShowAllTasks] = useState(false)
 
-  const { value: lastGeneratedTasks, setValue: setLastGeneratedTasks, isLoading: isLoadingLastGeneratedTasks } = useSetting<number>('last_generated_tasks_from_inbox')
-  const { value: preferredName } = useSetting<string>('preferred_name')
+  const [lastGeneratedTasks, setLastGeneratedTasks, { isLoading: isLoadingLastGeneratedTasks }] = useSetting<number>(
+    'last_generated_tasks_from_inbox',
+  )
+  const [preferredName] = useSetting<string>('preferred_name')
 
   const hours = new Date().getHours()
   const timeOfDay = hours < 12 ? 'Morning' : hours < 18 ? 'Afternoon' : 'Evening'
@@ -81,7 +83,9 @@ export default function WelcomePage() {
   return (
     <div className="h-full w-full p-4 sm:p-8 flex flex-col gap-6 bg-gradient-to-br from-background to-secondary/20 overflow-y-auto">
       <div className="max-w-4xl mx-auto w-full">
-        <h1 className="text-4xl font-bold tracking-tight mb-2 text-primary">{preferredName ? `Good ${timeOfDay}, ${preferredName}` : `Good ${timeOfDay}`}</h1>
+        <h1 className="text-4xl font-bold tracking-tight mb-2 text-primary">
+          {preferredName ? `Good ${timeOfDay}, ${preferredName}` : `Good ${timeOfDay}`}
+        </h1>
         <p className="text-muted-foreground text-lg">{date}</p>
 
         {/* Tasks List Section */}
@@ -102,7 +106,13 @@ export default function WelcomePage() {
                 </Tooltip>
               </TooltipProvider>
             </div>
-            <Button variant="ghost" size="icon" onClick={() => refresh(true)} className="cursor-pointer" disabled={isRefreshing}>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => refresh(true)}
+              className="cursor-pointer"
+              disabled={isRefreshing}
+            >
               <RefreshCw className={`h-5 w-5 ${isRefreshing ? 'animate-spin' : ''}`} />
             </Button>
           </div>
@@ -138,12 +148,20 @@ export default function WelcomePage() {
                       </div>
                     ))}
                     {tasksList.length > 3 && !showAllTasks && (
-                      <Button variant="ghost" className="w-full mt-4 flex items-center justify-center gap-2" onClick={() => setShowAllTasks(true)}>
+                      <Button
+                        variant="ghost"
+                        className="w-full mt-4 flex items-center justify-center gap-2"
+                        onClick={() => setShowAllTasks(true)}
+                      >
                         Show More <ChevronDown className="h-4 w-4" />
                       </Button>
                     )}
                     {showAllTasks && (
-                      <Button variant="ghost" className="w-full mt-4 flex items-center justify-center gap-2" onClick={() => setShowAllTasks(false)}>
+                      <Button
+                        variant="ghost"
+                        className="w-full mt-4 flex items-center justify-center gap-2"
+                        onClick={() => setShowAllTasks(false)}
+                      >
                         Show Less <ChevronDown className="h-4 w-4 rotate-180" />
                       </Button>
                     )}

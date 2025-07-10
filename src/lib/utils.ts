@@ -1,9 +1,14 @@
-import { ChatMessage, ParsedEmail, ParsedEmailHeader } from '@/types'
+import { ChatMessage, ParsedEmail, ParsedEmailHeader, UIMessageMetadata } from '@/types'
 import { UIMessage } from 'ai'
 import { clsx, type ClassValue } from 'clsx'
 import dayjs from 'dayjs'
 import { twMerge } from 'tailwind-merge'
-import { CamelCasedProperties, CamelCasedPropertiesDeep, SnakeCasedProperties, SnakeCasedPropertiesDeep } from 'type-fest'
+import {
+  CamelCasedProperties,
+  CamelCasedPropertiesDeep,
+  SnakeCasedProperties,
+  SnakeCasedPropertiesDeep,
+} from 'type-fest'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -25,12 +30,15 @@ export function convertDbChatMessageToUIMessage(message: ChatMessage): UIMessage
 }
 
 export function convertUIMessageToDbChatMessage(message: UIMessage, chatThreadId: string): ChatMessage {
+  const metadata = message.metadata as UIMessageMetadata | undefined
+
   return {
     id: message.id,
     parts: message.parts || [],
     role: message.role,
     content: message.parts.map((part) => (part.type === 'text' ? part.text : '')).join(''),
     chatThreadId,
+    modelId: metadata?.modelId ?? null,
   }
 }
 
@@ -39,15 +47,21 @@ export function getHeadersFromParsedEmail(parsedEmail: ParsedEmail): ParsedEmail
 }
 
 export function getSubjectFromParsedEmail(parsedEmail: ParsedEmail): string | undefined {
-  return getHeadersFromParsedEmail(parsedEmail).find((header) => typeof header.name === 'string' && header.name.toLocaleLowerCase() === 'subject')?.value.Text
+  return getHeadersFromParsedEmail(parsedEmail).find(
+    (header) => typeof header.name === 'string' && header.name.toLocaleLowerCase() === 'subject',
+  )?.value.Text
 }
 
 export function getMessageIdFromParsedEmail(parsedEmail: ParsedEmail): string | undefined {
-  return getHeadersFromParsedEmail(parsedEmail).find((header) => typeof header.name === 'string' && header.name.toLocaleLowerCase() === 'message_id')?.value.Text
+  return getHeadersFromParsedEmail(parsedEmail).find(
+    (header) => typeof header.name === 'string' && header.name.toLocaleLowerCase() === 'message_id',
+  )?.value.Text
 }
 
 export function getFromFromParsedEmail(parsedEmail: ParsedEmail): string | undefined {
-  return getHeadersFromParsedEmail(parsedEmail).find((header) => typeof header.name === 'string' && header.name.toLocaleLowerCase() === 'from')?.value.Text
+  return getHeadersFromParsedEmail(parsedEmail).find(
+    (header) => typeof header.name === 'string' && header.name.toLocaleLowerCase() === 'from',
+  )?.value.Text
 }
 
 export function snakeCased(str: string): string {
@@ -71,7 +85,9 @@ export function snakeCasedProperties<T extends Record<string, any>>(obj: T): Sna
         result[snakeKey] = snakeCasedProperties(value)
       } else if (Array.isArray(value)) {
         // Handle arrays by mapping each item
-        result[snakeKey] = value.map((item: any) => (typeof item === 'object' && item !== null ? snakeCasedProperties(item) : item))
+        result[snakeKey] = value.map((item: any) =>
+          typeof item === 'object' && item !== null ? snakeCasedProperties(item) : item,
+        )
       } else {
         result[snakeKey] = value
       }
@@ -125,7 +141,9 @@ export function camelCasedProperties<T extends Record<string, any>>(obj: T): Cam
         result[camelKey] = camelCasedProperties(value)
       } else if (Array.isArray(value)) {
         // Handle arrays by mapping each item
-        result[camelKey] = value.map((item: any) => (typeof item === 'object' && item !== null ? camelCasedProperties(item) : item))
+        result[camelKey] = value.map((item: any) =>
+          typeof item === 'object' && item !== null ? camelCasedProperties(item) : item,
+        )
       } else {
         result[camelKey] = value
       }

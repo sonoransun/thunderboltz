@@ -1,5 +1,11 @@
 import { getBooleanSetting, getSetting, updateSetting } from '@/lib/dal'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type UseMutationResult,
+  type UseQueryResult,
+} from '@tanstack/react-query'
 
 /**
  * Custom hook for managing settings with React Query
@@ -18,37 +24,47 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
  * setCloudUrl('https://new-url.com')
  * ```
  */
-export const useSetting = (key: string, defaultValue: string | null = null) => {
+export const useSetting = <T = string>(
+  key: string,
+  defaultValue: T | null = null,
+): [
+  T | null,
+  (newValue: T | null) => void,
+  UseQueryResult<T | null, Error>,
+  UseMutationResult<void, Error, T | null, unknown>,
+] => {
   const queryClient = useQueryClient()
 
-  const { data: value = defaultValue } = useQuery({
+  const query = useQuery({
     queryKey: ['setting', key],
     queryFn: () => getSetting(key, defaultValue),
   })
 
   const mutation = useMutation({
-    mutationFn: (newValue: string) => updateSetting(key, newValue),
+    mutationFn: (newValue: T | null) => updateSetting(key, newValue ? newValue.toString() : null),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['setting', key] })
     },
   })
 
-  const setValue = (newValue: string) => {
+  const setValue = (newValue: T | null) => {
     mutation.mutate(newValue)
   }
 
-  return [value, setValue] as const
+  const value = query.data ?? defaultValue
+
+  return [value, setValue, query, mutation]
 }
 
 /**
  * Custom hook for managing boolean settings with React Query
  * @param key The setting key
  * @param defaultValue The default boolean value if setting doesn't exist
- * @returns [value, setter] tuple with boolean value and boolean setter
+ * @returns [value, setter, query, mutation] tuple with boolean value, boolean setter, and query/mutation objects
  *
  * @example
  * ```tsx
- * const [triggersEnabled, setTriggersEnabled] = useBooleanSetting('is_triggers_enabled', false)
+ * const [triggersEnabled, setTriggersEnabled, query, mutation] = useBooleanSetting('is_triggers_enabled', false)
  *
  * // Use the value
  * if (triggersEnabled) {
@@ -57,14 +73,27 @@ export const useSetting = (key: string, defaultValue: string | null = null) => {
  *
  * // Update the value
  * setTriggersEnabled(true)
+ *
+ * // Check loading state
+ * if (query.isLoading) {
+ *   // Handle loading
+ * }
  * ```
  */
-export const useBooleanSetting = (key: string, defaultValue: boolean = false) => {
+export const useBooleanSetting = (
+  key: string,
+  defaultValue: boolean = false,
+): [
+  boolean,
+  (newValue: boolean) => void,
+  UseQueryResult<boolean, Error>,
+  UseMutationResult<void, Error, boolean, unknown>,
+] => {
   const queryClient = useQueryClient()
 
-  const { data: value = defaultValue } = useQuery({
+  const query = useQuery({
     queryKey: ['setting', key],
-    queryFn: (): Promise<boolean> => getBooleanSetting(key, defaultValue),
+    queryFn: () => getBooleanSetting(key, defaultValue),
   })
 
   const mutation = useMutation({
@@ -78,5 +107,7 @@ export const useBooleanSetting = (key: string, defaultValue: boolean = false) =>
     mutation.mutate(newValue)
   }
 
-  return [value, setValue] as const
+  const value = query.data ?? defaultValue
+
+  return [value, setValue, query, mutation]
 }
