@@ -6,7 +6,7 @@ from functools import lru_cache
 from typing import Any
 
 import httpx
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -122,6 +122,19 @@ async def proxy_lifespan(app: FastAPI) -> Any:
                 supports_streaming=True,  # Enable streaming support
             ),
         )
+
+    # PostHog Analytics proxy
+    proxy_service.register_proxy(
+        "/posthog",
+        ProxyConfig(
+            target_url=settings.posthog_host,
+            api_key="",  # No API key needed for PostHog client-side tracking
+            api_key_header="Authorization",
+            api_key_as_query_param=False,
+            require_auth=False,  # Allow public access for analytics
+            supports_streaming=False,  # PostHog doesn't use streaming
+        ),
+    )
 
     # Add more proxy configurations as needed
     # proxy_service.register_proxy("/proxy/another-api", ProxyConfig(...))
@@ -312,6 +325,55 @@ async def openai_proxy_endpoint(
     return await proxy_service.proxy_request(request, path, config)
 
 
+# PostHog Analytics proxy endpoint
+@app.api_route(
+    "/posthog/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    include_in_schema=False,  # Hide from OpenAPI schema as it's a proxy
+)
+async def posthog_proxy_endpoint(
+    path: str,
+    request: Request,
+    proxy_service: ProxyService = Depends(get_proxy_service),
+) -> Any:
+    """PostHog Analytics proxy endpoint."""
+    # Handle OPTIONS preflight requests
+    if request.method == "OPTIONS":
+        return JSONResponse({"status": "ok"})
+
+    # Get the configuration for this path
+    config = proxy_service.get_config("/posthog")
+    if not config:
+        raise HTTPException(status_code=404, detail="PostHog proxy not configured")
+
+    # No auth required for this endpoint - it's handled by the proxy
+    # Proxy the request
+    response = await proxy_service.proxy_request(request, path, config)
+
+    # Fix CORS headers for browser compatibility
+    if hasattr(response, "headers"):
+        # Remove any problematic headers
+        headers_to_remove = []
+        for key in response.headers:
+            key_lower = key.lower()
+            if key_lower in [
+                "cross-origin-resource-policy",
+                "cross-origin-embedder-policy",
+                "cross-origin-opener-policy",
+            ]:
+                headers_to_remove.append(key)
+
+        for key in headers_to_remove:
+            del response.headers[key]
+
+        # Add browser-friendly CORS headers
+        response.headers["Cross-Origin-Resource-Policy"] = "cross-origin"
+        response.headers["Cross-Origin-Embedder-Policy"] = "unsafe-none"
+        response.headers["Cross-Origin-Opener-Policy"] = "unsafe-none"
+
+    return response
+
+
 @app.api_route(
     "/proxy/{path:path}",
     methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
@@ -361,3 +423,24 @@ async def proxy_endpoint(
 
 app.include_router(google_router)
 app.include_router(microsoft_router)
+
+
+# ---------------------------------------------------------------------------
+# Analytics configuration endpoint
+# ---------------------------------------------------------------------------
+analytics_router = APIRouter(prefix="/analytics", tags=["analytics"])
+
+
+@analytics_router.get("/config")
+async def analytics_config() -> dict[str, str]:
+    """Return public analytics configuration for the frontend.
+
+    Exposes only non-sensitive values required for client initialization.
+    """
+    settings = get_settings()
+    return {
+        "posthog_api_key": settings.posthog_api_key,
+    }
+
+
+app.include_router(analytics_router)
