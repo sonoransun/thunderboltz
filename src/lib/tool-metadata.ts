@@ -1,13 +1,16 @@
 import type { ToolConfig } from '@/types'
 import { memoize } from './memoize'
 import { getAvailableTools } from './tools'
+import { Calendar, CloudSun, FileText, FolderSearch, Globe, Inbox, Mail, MailSearch, Search } from 'lucide-react'
 
 export type ToolCategory = 'search' | 'data' | 'action' | 'analysis' | 'communication' | 'weather' | 'unknown'
 
 export type ToolMetadata = {
   displayName: string
+  initials: string
   loadingMessage: string
   category: ToolCategory
+  icon: any
 }
 
 // Cache for performance
@@ -145,6 +148,50 @@ const generateLoadingMessage = (toolName: string, category: ToolCategory, input?
   return messages[category] || `Using "${toolName}" tool...`
 }
 
+const getToolIcon = (toolName: string) => {
+  switch (toolName) {
+    case 'get_current_weather':
+    case 'get_weather_forecast':
+      return CloudSun
+
+    case 'search':
+      return Search
+
+    case 'google_check_inbox':
+      return Inbox
+
+    case 'google_search_emails':
+      return MailSearch
+
+    case 'google_get_email':
+      return Mail
+
+    case 'google_check_calendar':
+      return Calendar
+
+    case 'google_search_drive':
+      return FolderSearch
+
+    case 'google_get_drive_file_content':
+      return FileText
+
+    case 'fetch_content':
+      return Globe
+
+    default:
+      return null
+  }
+}
+
+const getDisplayNameInitials = (displayName: string) =>
+  displayName
+    .split(' ')
+    .slice(0, 2)
+    .map((word) => word[0])
+    .filter(Boolean)
+    .join('')
+    .toUpperCase()
+
 /**
  * Gets tool metadata with caching for performance (async version)
  */
@@ -159,10 +206,14 @@ export const getToolMetadata = async (toolName: string, args?: unknown): Promise
   const toolConfig = await getToolConfigByName(toolName)
   const category = detectCategory(toolName)
 
+  const displayName = formatDisplayName(toolName)
+
   const metadata: ToolMetadata = {
-    displayName: formatDisplayName(toolName),
+    displayName,
+    initials: getDisplayNameInitials(displayName),
     loadingMessage: generateLoadingMessage(toolName, category, args, toolConfig?.verb),
     category,
+    icon: getToolIcon(toolName),
   }
 
   metadataCache.set(cacheKey, metadata)
@@ -181,10 +232,14 @@ export const getToolMetadataSync = (toolName: string, input?: unknown): ToolMeta
   }
 
   const category = detectCategory(toolName)
+  const displayName = formatDisplayName(toolName)
+
   const metadata: ToolMetadata = {
-    displayName: formatDisplayName(toolName),
+    displayName,
+    initials: getDisplayNameInitials(displayName),
     loadingMessage: generateLoadingMessage(toolName, category, input),
     category,
+    icon: getToolIcon(toolName),
   }
 
   metadataCache.set(cacheKey, metadata)

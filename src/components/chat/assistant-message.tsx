@@ -1,10 +1,18 @@
 import { splitPartType } from '@/lib/utils'
 import type { UIMessage, ReasoningUIPart, TextUIPart, ToolUIPart } from 'ai'
+import { memo, type ReactNode } from 'react'
+import { DisplayToolHandler } from './display-tool-handler'
 import { ReasoningPart } from './reasoning-part'
 import { SyntheticLoadingPart } from './synthetic-loading-part'
 import { TextPart } from './text-part'
-import { memo } from 'react'
-import { DisplayToolHandler } from './display-tool-handler'
+import { ToolGroup } from './tool-group'
+import {
+  filterMessageParts,
+  type GroupableUIPart,
+  groupToolParts,
+  type ToolGroupUIPart,
+  type GroupedUIPart,
+} from '@/lib/assistant-message'
 
 interface AssistantMessageProps {
   message: UIMessage
@@ -14,34 +22,23 @@ interface AssistantMessageProps {
 // Animation classes for subtle slide-in effect
 const animationClasses = 'animate-in slide-in-from-bottom-2 fade-in duration-300 ease-out'
 
-const supportedPartTypes = ['reasoning', 'tool', 'text']
+const mountMessageParts = (groupedParts: GroupedUIPart[]) => {
+  const partElements: ReactNode[] = []
 
-export const AssistantMessage = memo(({ message }: AssistantMessageProps) => {
-  const filteredParts = message.parts.filter((part) => {
-    const [partType] = splitPartType(part.type)
-    if (!supportedPartTypes.includes(partType)) {
-      return false
-    }
-    if (partType === 'text') {
-      // Currently there is a bug in the Vercel AI SDK where empty text parts are emitted - we must remove them in order to avoid rendering empty gaps in the UI
-      return (part as TextUIPart).text.trim() !== ''
-    }
-    return true
-  })
-
-  const partElements = []
-
-  if (filteredParts.length === 0) {
+  if (groupedParts.length === 0) {
     // isStreaming should always be true because the next part will *replace* this one
     partElements.push(<SyntheticLoadingPart isStreaming={true} />)
   }
 
-  filteredParts.forEach((part) => {
+  groupedParts.forEach((part) => {
     const [partType] = splitPartType(part.type)
 
     switch (partType) {
       case 'reasoning':
         partElements.push(<ReasoningPart part={part as ReasoningUIPart} />)
+        break
+      case 'group_tools':
+        partElements.push(<ToolGroup tools={(part as ToolGroupUIPart).tools} />)
         break
       case 'tool':
         partElements.push(<DisplayToolHandler part={part as ToolUIPart} />)
@@ -51,6 +48,16 @@ export const AssistantMessage = memo(({ message }: AssistantMessageProps) => {
         break
     }
   })
+
+  return partElements
+}
+
+export const AssistantMessage = memo(({ message }: AssistantMessageProps) => {
+  const filteredParts = filterMessageParts(message.parts) as GroupableUIPart[]
+
+  const groupedParts = groupToolParts(filteredParts)
+
+  const partElements: ReactNode[] = mountMessageParts(groupedParts)
 
   return (
     <div>
