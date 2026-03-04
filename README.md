@@ -319,7 +319,7 @@ git subtree push --prefix=.claude/commands thunderbot main
 If you haven't added the remote yet:
 
 ```bash
-git remote add thunderbot git@github.com:user/thunderbot.git
+git remote add thunderbot git@github.com:thunderbird/thunderbot.git
 ```
 
 ## Documentation
