@@ -42,13 +42,6 @@ import {
 import { type MCPClient } from '@ai-sdk/mcp'
 import { createMessageMetadata } from './message-metadata'
 
-export const ollama = createOpenAI({
-  baseURL: 'http://localhost:11434/v1',
-  // compatibility: 'compatible',
-  apiKey: 'ollama',
-  fetch,
-})
-
 type AiFetchStreamingResponseOptions = {
   init: RequestInit
   saveMessages: SaveMessagesFunction
@@ -123,6 +116,42 @@ export const createModel = async (modelConfig: Model) => {
         fetch,
       })
       return openrouter(modelConfig.model)
+    }
+    case 'ollama': {
+      const ollama = createOpenAICompatible({
+        name: 'ollama',
+        baseURL: modelConfig.url || 'http://localhost:11434/v1',
+        apiKey: modelConfig.apiKey || 'ollama',
+        fetch,
+      })
+      return ollama(modelConfig.model)
+    }
+    case 'llama-cpp': {
+      const llamaCpp = createOpenAICompatible({
+        name: 'llama-cpp',
+        baseURL: modelConfig.url || 'http://localhost:8080/v1',
+        apiKey: modelConfig.apiKey || 'llama-cpp',
+        fetch,
+      })
+      return llamaCpp(modelConfig.model)
+    }
+    case 'huggingface': {
+      if (!modelConfig.apiKey) {
+        throw new Error('No API key provided')
+      }
+      const huggingface = createOpenAICompatible({
+        name: 'huggingface',
+        baseURL: modelConfig.url || 'https://router.huggingface.co/v1',
+        apiKey: modelConfig.apiKey,
+        fetch,
+      })
+      return huggingface(modelConfig.model)
+    }
+    case 'huggingface-local': {
+      // In-browser inference via @mlc-ai/web-llm. Lazy-imported so the ~5-10 MB
+      // library only loads when this provider is actually used.
+      const { createHuggingFaceLocal } = await import('./huggingface-local-provider')
+      return createHuggingFaceLocal({ modelId: modelConfig.model })
     }
     default:
       throw new Error(`Unsupported provider: ${modelConfig.provider}`)

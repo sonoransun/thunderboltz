@@ -57,8 +57,13 @@ export default function ModelsLayout() {
             <SelectItem key={model.id} value={model.id}>
               <p className="text-left">
                 {model.provider === 'thunderbolt' && 'Thunderbolt'}
+                {model.provider === 'anthropic' && 'Anthropic'}
                 {model.provider === 'openai' && 'OpenAI'}
                 {model.provider === 'openrouter' && 'OpenRouter'}
+                {model.provider === 'ollama' && 'Ollama'}
+                {model.provider === 'llama-cpp' && 'llama.cpp'}
+                {model.provider === 'huggingface' && 'HuggingFace'}
+                {model.provider === 'huggingface-local' && 'HuggingFace (in-browser)'}
                 {model.provider === 'custom' && 'Custom'} - {model.model}
               </p>
             </SelectItem>

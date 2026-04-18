@@ -23,11 +23,11 @@
     "security": {
       "csp": {
         "default-src": "'self' tauri: asset:",
-        "connect-src": "'self' ipc: http://ipc.localhost https: wss: http://localhost:8000 http://localhost:11434",
+        "connect-src": "'self' ipc: http://ipc.localhost https: wss: http://localhost:8000 http://localhost:11434 http://localhost:8080 http://localhost:8081 https://huggingface.co https://raw.githubusercontent.com",
         "img-src": "'self' asset: data: https://api.thunderbolt.io",
         "font-src": "'self' data:",
         "style-src": "'self' 'unsafe-inline'",
-        "script-src": "'self'"
+        "script-src": "'self' 'wasm-unsafe-eval'"
       }
     },
     "withGlobalTauri": true

@@ -1,110 +1,124 @@
-## Core Principles
+# CLAUDE.md
 
-- **Bias towards tasteful simplicity** - favor elegant, readable, maintainable solutions that add minimal complexity. Avoid over-engineering, premature optimization, and defensive coding patterns that obscure intent.
-- **Always implement proper, architectural solutions** - no shortcuts, hacky fixes, or temporary workarounds. Research best practices when needed.
-- **Prefer optimistic code over defensive code** - let errors surface loudly during development rather than wrapping everything in if-checks and try/catch blocks. Handle errors architecturally at higher levels (e.g., error handling middleware).
-- **Deletes (soft vs hard)**
-  - **Frontend**: Never hard delete. Always soft delete data (set `deletedAt`; call APIs that update rather than permanently remove). The only exception is flows that explicitly perform account or device removal (e.g. “Delete account”), which call backend endpoints that hard delete by design.
-  - **Backend**: Prefer soft deletes—set `deletedAt` and filter out soft-deleted records in queries. Use hard delete only when required: e.g. account deletion (user and related data), PowerSync delete operations, or other cases where permanent removal is by design.
-- **Question and recommend alternatives** - your goal is better outcomes, not blind execution. Stop and ask for input when appropriate.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## TypeScript & Code Style
+## Repository Layout
 
-- Never use `any` in TypeScript
-- Prefer `type` over `interface`
-- Prefer arrow functions over `function` keyword
-- Prefer `const` over `let` - create helper functions with early return instead of setting `let` variables inside conditionals
-- Use camelCase for const and variable names
-- Prefer early return over long if statements and nested code
-- Use direct imports: `useEffect` not `React.useEffect`
-- Prefer top-level imports over inline/dynamic imports (`await import(...)`) when no circular dependency exists
-- Prefer async/await over .then/.catch
-- Add JSDoc comments to new utility functions
-- Only comment non-obvious code - avoid useless comments like "// Save data collection mutation" before `saveDataCollection()`
-- Loosely prefer one React component per file
+Thunderbolt is a cross-platform AI client built as a Tauri + React + Bun stack. The tree is a polyglot monorepo; it is **not** a workspaces setup — the frontend root and `backend/` each have their own `package.json`, `bun.lock`, `eslint.config.js`, and `tsconfig.json`. You must `cd backend` to operate on backend code.
 
-## Tooling & Libraries
+- `src/` — React 19 frontend (renders in both a web browser and the Tauri webview)
+- `backend/src/` — Elysia-on-Bun REST API (inference proxy, auth, PowerSync write bridge)
+- `src-tauri/` — Rust-based Tauri shell (desktop, iOS, Android)
+- `shared/` — code imported by both frontend and backend (currently just PowerSync table declarations); aliased as `@shared/*`
+- `powersync-service/` — Docker Compose stack for local PowerSync + Postgres
+- `marketing/` — separate site, not part of the app build
+- `.thunderbot/` — git subtree of slash commands pulled from the `thunderbot` repo; sync via `make thunderbot-pull` / `make thunderbot-push`. `.claude/commands/*` are symlinks into this directory created by `make setup-symlinks`.
 
-- Use `bun` instead of `npm`
-- Use `bun test` instead of `vitest`
-- Install latest versions: `bun add <package>@latest`
-- Use the app's `HttpClient` (`src/lib/http.ts`) instead of bare `fetch` — use `getHttpClient()` for authenticated backend calls, `http` for external APIs
-- Generate Drizzle migrations with `bun db generate` - never manually create SQL files
-- Never manually run `git add`, `git commit`, or `git push` — always use `/thunderpush`
-- Use `resolve-library-id` and `get-library-docs` tools for library documentation (if unavailable, request access)
+TypeScript path aliases: `@/*` → `src/*`, `@shared/*` → `shared/*`. Backend has its own `@/*` alias into `backend/src/*`.
 
-## React Patterns
+## Common Commands
 
-- Use `useReducer` when a component needs 3+ `useState` hooks
-- Abstract state/logic into `use[Component]State()` hooks to separate computation from display logic and enable unit testing
+Prefer `make` targets — they wrap both frontend and backend correctly.
 
-### `useEffect` Discipline
+```sh
+make setup          # install frontend + backend deps + create agent symlinks
+make run            # start backend (:8000) and frontend (:5173) together
+make docker-up      # start PowerSync + Postgres (required for backend)
+make docker-nuke    # destroy all docker data and recreate
+make doctor-q       # verify tool versions and .env files (quiet mode)
+make check          # type-check + lint + format-check (frontend only)
+make format         # format frontend, backend, and Rust
+make test           # run both frontend and backend tests
+```
 
-**Treat every `useEffect` as a code smell until proven necessary.** Before writing or reviewing a `useEffect`, consult https://react.dev/learn/you-might-not-need-an-effect and verify it doesn't match a known anti-pattern.
+Frontend-only (run from repo root):
 
-**Never use `useEffect` for:**
-- **Deriving state from props/state** — compute during render: `const x = derive(props)` or use `useMemo`
-- **Syncing props into state** — use the prop directly, or use a ref to detect prop changes during render
-- **Notifying parents of state changes** — call the callback in the event handler that caused the change
-- **Resetting state when a prop changes** — use a `key` prop on the component, or a `useState` lazy initializer
-- **One-time initialization from already-available data** — use `useState(() => computeInitial())` lazy initializer
-- **Navigation side effects** — return `<Navigate replace />` in JSX
-- **Assigning to refs** — assign `ref.current` directly in the render body
+```sh
+bun dev                      # Vite dev server on :1420 (NOT :5173 — that's via `make run`)
+bun run test                 # tests in src/ and scripts/ only
+bun run test:watch
+bun test path/to/file.test.ts   # single test file
+bun run type-check           # tsc --noEmit
+bun run lint                 # eslint src --ext .ts,.tsx
+bun run e2e                  # Playwright
+bun run storybook            # Storybook on :6006
+bun tauri:dev:desktop        # Tauri desktop dev
+bun tauri:dev:ios            # iOS simulator
+bun tauri:dev:android        # Android emulator
+bun run analyze              # bundle analyzer
+bun run db <drizzle-kit cmd> # frontend Drizzle (SQLite)
+```
 
-**Prefer these hooks over `useEffect` when applicable:**
-- `useSyncExternalStore` — for subscribing to external stores, browser APIs (`matchMedia`, `addEventListener`)
-- `useEffectEvent` — to extract handler logic out of effects, eliminating stale closures and dependency bloat
-- `useOptimistic` + `useTransition` — for optimistic UI updates instead of `useState` + `useEffect` + `useMutation`
-- `useTransition` — for wrapping async operations with automatic `isPending` instead of manual loading state
-- `useDeferredValue` — for deferring expensive re-renders instead of timer-based debounce
+Backend-only (run from `backend/`):
 
-**Legitimate `useEffect` uses** (keep these): DOM event listeners with cleanup, external system subscriptions (WebSocket, SDK listeners), DOM measurements/scroll, timers with cleanup, analytics/tracking, async operations on mount.
+```sh
+bun run dev                  # backend dev server
+bun test                     # backend tests (from backend/ only)
+bun run test:watch
+bun test src/path.test.ts    # single test file
+bun run type-check
+bun db generate              # Drizzle: new migration after editing schema
+bun db migrate               # apply migrations
+bun run db:dev               # run Postgres via PGLite (serves .pglite/data)
+```
 
-## Testing
+**Do not run `bun test` from the repo root without args** — it picks up both frontend and backend suites and misconfigures the test environment. Use `bun run test` (the npm script), which is scoped to `./src ./scripts ./.github/scripts`.
 
-- Create test files as `<file>.test.ts` next to source files
-- Test likely edge cases, aiming for useful 80% coverage
+## Architecture
 
-## After Each Task
+### Local-first data flow
 
-- Consider refactoring into standalone functions for clarity
-- Remove unused variables and imports
-- Verify tests pass and no TypeScript errors exist
+The frontend owns the source of truth. Data lives in a local SQLite database (WA-SQLite in the browser via a SharedWorker, `bun:sqlite` on the desktop Tauri shell — see `src/db/`). PowerSync syncs that SQLite to Postgres on the server. The REST API is only for actions SQLite can't model: auth, LLM inference, MCP proxy, rate limits.
 
-## PowerSync and synced tables
+- `src/dal/` — the data access layer. All reads/writes to local SQLite go through here. **When adding new queries, add them to a `dal/` file — don't call Drizzle directly from components or hooks.**
+- `src/db/schema.ts` — Drizzle schema for the **frontend** SQLite.
+- `backend/src/db/schema.ts` + `powersync-schema.ts` — Drizzle schema for the **backend** Postgres.
+- `shared/powersync-tables.ts` — shared table definitions used to generate PowerSync's client-side schema.
 
-See [docs/powersync-account-devices.md](docs/powersync-account-devices.md) for: synced table requirements, adding a new table (frontend + backend + schema + config.yaml + production), account deletion, device management, and backend token/revoke API.
+### PowerSync and composite primary keys
 
-See [docs/powersync-sync-middleware.md](docs/powersync-sync-middleware.md) for: sync data transformation middleware, custom SharedWorker (multi-tab + encryption), and adding new transformers.
+Default-data tables (`settings`, `models`, `modes`, `tasks`, `prompts`, `model_profiles`) use **composite primary keys `(id, user_id)`** on the backend so each user can have their own row with the same default ID (e.g. `openai-gpt-4o`). The frontend schema uses a single-column PK because local data is per-device.
 
-See [docs/e2e-encryption.md](docs/e2e-encryption.md) for: E2E encryption architecture, key hierarchy, device approval flows, encrypted columns configuration, API endpoints, and user flows.
+When adding a new PowerSync-synced table:
 
-**Deploying new synced tables (two-PR process):**
+- Add a `user_id` column + index: `index('idx_[table]_user_id').on(table.userId)`. PowerSync sync rules filter by `user_id`, so this index is required.
+- For default-seeded tables, use a composite PK and update `powersyncConflictTarget` in `backend/src/db/powersync-schema.ts` (and `powersyncPkColumn` for the business-id column used in PATCH/DELETE WHERE).
+- **Do not** add composite foreign key constraints, active indexes (`WHERE deletedAt IS NULL`), or indexes on FK columns. The backend is a sync server — joins happen in the frontend SQLite, and encrypted data can't be indexed meaningfully anyway.
 
-1. **PR 1 (backend-only):** Backend schema, Drizzle migration, `shared/powersync-tables.ts`, and `config.yaml` sync rule. Merge → run migration → update PowerSync Cloud dashboard rules.
-2. **PR 2 (frontend + everything else):** Frontend schema, DAL, defaults, reconciliation, and any UI/logic. Merge only after PR 1's dashboard rules are live.
+Full rationale in `docs/composite-primary-keys-and-default-data.md`.
 
-Deploying frontend before the sync rules are updated causes silent sync failure — the table works locally but won't replicate across devices.
-See [docs/powersync-account-devices.md](docs/powersync-account-devices.md#pr-flow-for-adding-tables).
+### Default-data reconciliation
 
-**Backend migrations checklist:** When adding a new migration, always verify that `backend/drizzle/meta/_journal.json` includes the new entry. Drizzle discovers pending migrations via the journal — if the SQL file and snapshot exist but the journal entry is missing, the migration will never run. This is easy to miss when cherry-picking migration files across branches.
+`src/lib/reconcile-defaults.ts` seeds the default settings/models/modes/tasks/prompts on app init. The `default_hash` column tracks whether a user has modified a default row; unmodified rows get updated when app defaults change.
 
-**Custom SharedWorker and `@powersync/web` internal path:** `vite.config.ts` defines a `powersync-web-internal` alias pointing to `@powersync/web/lib/src` (an internal, non-public-API path). This is required for the custom `ThunderboltSharedSyncImplementation` to extend `SharedSyncImplementation`. When upgrading `@powersync/web`, verify this internal path still exists — it may break without a TypeScript error.
+### AI / inference
 
-## CORS and API headers
+- `src/ai/` — frontend AI: prompt building (`prompt.ts`), streaming (`streaming/`), tokenizers, step logic, widget parser. Uses the Vercel AI SDK (`ai`, `@ai-sdk/*`) and MCP client (`@modelcontextprotocol/sdk`).
+- `backend/src/inference/routes.ts` — SSE streaming proxy to LLM providers. The frontend never calls provider APIs directly (except in "bring your own key" mode); it calls the backend, which enforces rate limits and routing.
 
-When adding new custom headers to API requests (e.g. `X-Device-ID`, `X-Device-Name`), update `backend/src/config/settings.ts` so `corsAllowHeaders` includes them. Otherwise CORS preflight will fail and requests from the browser will be blocked.
+### E2E encryption (optional)
 
-## Responsive Sizing
+When enabled (`VITE_E2EE_ENABLED`, default on), data is encrypted client-side before sync. See `src/crypto/`, `backend/src/api/encryption.ts`, and `docs/e2e-encryption.md`. Because the server can't read user data, **don't design backend queries that assume readable payload fields** for synced tables.
 
-The project overrides Tailwind's CSS theme variables in `/src/index.css` `:root` with responsive mobile/desktop values that switch at the 768px breakpoint. Use standard Tailwind classes — **do NOT** use `var()` syntax for properties that have Tailwind equivalents.
+### Backend shape
 
-**Standard Tailwind classes (responsive via theme overrides):**
-- Border radius: `rounded-sm`, `rounded-md`, `rounded-lg`, `rounded-xl`, `rounded-2xl`
-- Spacing: Use standard Tailwind spacing (`px-2`, `px-3`, `py-1.5`, `gap-2`, etc.)
+Elysia (Bun) app in `backend/src/index.ts`. Routes are factories (`create*Routes(deps)`) that take an `AppDeps` so tests can inject a `database` and `fetchFn`. Swagger at `/v1/swagger` when `SWAGGER_ENABLED=true`.
 
-**Custom CSS variables (no Tailwind equivalent — use `var()` syntax):**
-- Text: `text-[length:var(--font-size-body)]`, `text-[length:var(--font-size-sm)]`, `text-[length:var(--font-size-xs)]`
-- Heights: `h-[var(--touch-height-default)]`, `h-[var(--touch-height-sm)]`, `h-[var(--touch-height-lg)]`, `h-[var(--touch-height-xl)]`
-- Icons: `size-[var(--icon-size-default)]`, `size-[var(--icon-size-sm)]`
-- Minimum heights: `min-h-[var(--min-touch-height)]`
+## Testing Conventions
+
+From `docs/testing.md` — violating these causes CI-only flakiness:
+
+- **Prefer dependency injection over mocking.** Network clients should accept an injected `httpClient` / `fetch` — don't `mock.module('ky', …)`.
+- **Never `mock.module()` a shared internal module** (e.g. `@/hooks/use-settings`, `@/components/ui/dialog`). Bun's `mock.module()` is global and persistent across test files in the same worker — an incomplete mock in one file crashes unrelated tests. Only mock truly external things (auth client, third-party APIs, `react-router`, missing browser APIs). If you absolutely must mock a shared UI module, export **every** member.
+- **Fake timers are installed globally.** Use `getClock()` from `@/testing-library` (`getClock().tickAsync(300)` or `.runAllAsync()`) to advance time. Don't `jest.useFakeTimers()`-style setup per test.
+- **Suppress expected console errors** with `spyOn(console, 'error').mockImplementation(() => {})` in `beforeAll` for tests that intentionally throw.
+- For DAL tests, use the real test database: `setupTestDatabase / teardownTestDatabase / resetTestDatabase` from `@/dal/test-utils` + `createTestProvider` from `@/test-utils/test-provider`.
+
+## Other Notes
+
+- Source maps are **off** by default so forks don't leak proprietary code. Set `ENABLE_SOURCEMAP=true` (CI only) to emit hidden maps for PostHog.
+- `VITE_BYPASS_WAITLIST=true` only bypasses the frontend waitlist gate — the backend still enforces it. Useful for UI-only development.
+- Vite dev server listens on port **1420** (fixed, for Tauri); `make run`'s frontend listens on **5173** (via the `dev` script's environment).
+- Frontend ESLint explicitly **ignores `backend/`**. Lint backend code from inside `backend/` with its own config.
+- Husky + lint-staged run on commit. If a pre-commit hook fails, fix the issue and make a **new** commit — never `--amend` or `--no-verify`.
+- `.claude/commands/*.md` are git-subtree-managed symlinks. To edit one locally, run `make thunderbot-customize FILE=<name>.md` first, which replaces the symlink with a writable copy.

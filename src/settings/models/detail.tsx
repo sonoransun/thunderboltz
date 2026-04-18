@@ -26,40 +26,35 @@ import { deleteModel, updateModel, getModelQuery } from '@/dal'
 import type { Model } from '@/types'
 import { Trash2 } from 'lucide-react'
 
+const providersRequiringUrl = ['custom']
+const providersRequiringApiKey = ['openai', 'anthropic', 'openrouter', 'huggingface']
+const providersWithOptionalUrl = ['custom', 'ollama', 'llama-cpp', 'huggingface']
+
 const formSchema = z
   .object({
-    provider: z.enum(['thunderbolt', 'anthropic', 'openai', 'custom', 'openrouter']),
+    provider: z.enum([
+      'thunderbolt',
+      'anthropic',
+      'openai',
+      'custom',
+      'openrouter',
+      'ollama',
+      'llama-cpp',
+      'huggingface',
+      'huggingface-local',
+    ]),
     name: z.string().min(1, { message: 'Name is required.' }),
     model: z.string().min(1, { message: 'Model name is required.' }),
     url: z.string().optional(),
     apiKey: z.string().optional(),
   })
   .refine(
-    (data) => {
-      if (data.provider === 'custom') {
-        return data.url !== undefined && data.url.length > 0
-      }
-      return true
-    },
-    {
-      message: 'URL is required for Custom providers',
-      path: ['url'],
-    },
+    (data) => !providersRequiringUrl.includes(data.provider) || (data.url && data.url.length > 0),
+    { message: 'URL is required for Custom providers', path: ['url'] },
   )
   .refine(
-    (data) => {
-      if (data.provider === 'custom') {
-        return true // API key is optional for custom provider
-      }
-      if (data.provider === 'thunderbolt') {
-        return true // API key not required for thunderbolt
-      }
-      return data.apiKey !== undefined && data.apiKey.length > 0
-    },
-    {
-      message: 'API Key is required for this provider',
-      path: ['apiKey'],
-    },
+    (data) => !providersRequiringApiKey.includes(data.provider) || (data.apiKey && data.apiKey.length > 0),
+    { message: 'API Key is required for this provider', path: ['apiKey'] },
   )
 
 export default function ModelDetailPage() {
@@ -177,13 +172,18 @@ export default function ModelDetailPage() {
                 />
               )}
 
-              {model.isSystem !== 1 && form.watch('provider') === 'custom' && (
+              {model.isSystem !== 1 && providersWithOptionalUrl.includes(form.watch('provider')) && (
                 <FormField
                   control={form.control}
                   name="url"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>URL</FormLabel>
+                      <FormLabel>
+                        URL
+                        {form.watch('provider') !== 'custom' && (
+                          <span className="text-xs text-muted-foreground"> (optional)</span>
+                        )}
+                      </FormLabel>
                       <FormControl>
                         <Input {...field} />
                       </FormControl>
@@ -193,19 +193,21 @@ export default function ModelDetailPage() {
                 />
               )}
 
-              <FormField
-                control={form.control}
-                name="apiKey"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>API Key</FormLabel>
-                    <FormControl>
-                      <Input type="password" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {form.watch('provider') !== 'huggingface-local' && (
+                <FormField
+                  control={form.control}
+                  name="apiKey"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>API Key</FormLabel>
+                      <FormControl>
+                        <Input type="password" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
 
               <Button
                 type="submit"

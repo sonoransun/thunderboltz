@@ -172,5 +172,8 @@
     "vite": "^7.3.2",
     "vite-bundle-analyzer": "^1.2.1",
     "vitest": "^3.2.4"
+  },
+  "optionalDependencies": {
+    "@mlc-ai/web-llm": "^0.2.82"
   }
 }

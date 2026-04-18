@@ -29,6 +29,16 @@ export default defineConfig({
     sourcemap,
     rollupOptions: {
       external: ['bun:sqlite'],
+      output: {
+        manualChunks: (id) => {
+          // Keep the in-browser LLM inference library out of the main bundle —
+          // it's ~5-10 MB and only loaded when the user picks `huggingface-local`.
+          if (id.includes('@mlc-ai/web-llm')) {
+            return 'llm-inference'
+          }
+          return undefined
+        },
+      },
     },
   },
   plugins: [

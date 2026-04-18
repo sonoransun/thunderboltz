@@ -1,4 +1,4 @@
-# Logs
+# --- Logs ---
 logs
 *.log
 npm-debug.log*
@@ -6,45 +6,132 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+*storybook.log
 
+# --- Dependencies ---
 node_modules
+# Project uses bun (bun.lock is committed); npm lockfile would conflict with the installed tree.
+package-lock.json
+# Yarn / pnpm lockfiles — same reasoning
+yarn.lock
+pnpm-lock.yaml
+
+# --- Build output ---
 dist
 dist-ssr
 dist-isolation
+storybook-static
 *.local
+# Root Rust target dir — also catches src-tauri/target anywhere in the tree
+target
+# Bundle analyzer output (emitted by `bun run analyze`)
+stats.html
+# Vite / bundler caches
+.vite
+.cache
+.turbo
+.parcel-cache
 
-# Editor directories and files
+# --- Environment / secrets ---
+# Do NOT commit any .env variant except the example files (already suffixed with .example)
+.env
+.env.local
+.env.*.local
+.env.development
+.env.development.local
+.env.production
+.env.production.local
+.env.test
+.env.test.local
+backend/.env
+backend/.env.local
+
+# Kubernetes secrets (use secrets.yaml.example as template)
+secrets.yaml
+# Generic secret files that sometimes drift in — never commit these
+secrets/
+*.pem
+*.p12
+*.pfx
+*.key
+*credentials*.json
+*service-account*.json
+
+# --- Signing keys (Tauri / mobile) ---
+tauri.key
+.tauri/
+# iOS signing / provisioning
+*.mobileprovision
+*.p8
+# NOTE: src-tauri/gen/apple/ExportOptions.plist is intentionally committed —
+# it only contains the teamID and provisioning-profile name, not secrets.
+# Android signing
+*.keystore
+*.jks
+google-services.json
+GoogleService-Info.plist
+
+# --- Tauri generated / mobile build output ---
+src-tauri/target/
+src-tauri/gen/apple/vendor/
+src-tauri/gen/apple/.bundle/
+src-tauri/gen/apple/Podfile.lock
+src-tauri/gen/android/app/build/
+src-tauri/gen/android/.gradle/
+src-tauri/WixTools/
+*.pdb
+
+# --- Backend ---
+# Local PGLite dev data
+backend/.pglite/
+backend/dist/
+
+# --- PowerSync ---
+public/@powersync/**
+
+# --- Testing ---
+# Playwright / e2e
+test-results/
+playwright-report/
+blob-report/
+# Coverage
+coverage/
+.nyc_output/
+*.lcov
+# Vitest cache
+.vitest-cache/
+
+# --- Eval results ---
+evals/
+
+# --- Editor / IDE ---
 .vscode/*
 !.vscode/extensions.json
 .idea
-.DS_Store
+.zed/**
+.zedscratches/**
+.fleet/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
 
-# Environment variables
-.env
+# --- OS cruft ---
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+$RECYCLE.BIN/
 
-# Kubernetes secrets (use secrets.yaml.example as template)
-secrets.yaml
-
-target
-
-# Tauri signing keys
-*.key
-tauri.key
-.tauri/
-*storybook.log
-storybook-static
-
-# Eval results
-evals/
-
-# Dev Ex custom things
+# --- Dev Ex (local-only tooling) ---
 mise*.toml
-mise.toml
+.mcp.json
+.worktrees/
+.bun/
+
+# --- Claude Code workspace ---
+# Ignore everything in .claude/ except the parts we intentionally share.
 .claude/**
 !.claude/commands/
 !.claude/commands/**
@@ -52,20 +139,3 @@ mise.toml
 !.claude/agents/**
 !.claude/rules/
 !.claude/rules/**
-.zed/**
-.zedscratches/**
-.mcp.json
-
-# iOS fastlane local bundle
-src-tauri/gen/apple/vendor/
-src-tauri/gen/apple/.bundle/
-
-.worktrees/
-
-# Playwright / e2e
-test-results/
-playwright-report/
-blob-report/
-
-# Powersync
-public/@powersync/**

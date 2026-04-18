@@ -36,6 +36,12 @@
           "url": "http://localhost:11434"
         },
         {
+          "url": "http://localhost:8080"
+        },
+        {
+          "url": "http://localhost:8081"
+        },
+        {
           "url": "http://localhost:3001"
         },
         {
@@ -43,6 +49,12 @@
         },
         {
           "url": "https://router.huggingface.co"
+        },
+        {
+          "url": "https://huggingface.co"
+        },
+        {
+          "url": "https://raw.githubusercontent.com"
         },
         {
           "url": "https://accounts.google.com"

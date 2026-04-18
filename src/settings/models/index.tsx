@@ -24,13 +24,15 @@ import { createModel as createModelDAL, deleteModel, getAllModels, resetModelToD
 import { defaultModels } from '@/defaults/models'
 import { isModelModified } from '@/defaults/utils'
 import { fetch } from '@/lib/fetch'
+import { http } from '@/lib/http'
+import { isDesktop, isTauri, isWebMobilePlatform } from '@/lib/platform'
+import { LocalServersPanel } from './local-servers'
 import type { Model } from '@/types'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation } from '@tanstack/react-query'
 import { useQuery } from '@powersync/tanstack-react-query'
 import { toCompilableQuery } from '@powersync/drizzle-driver'
 import { generateText } from 'ai'
-import { http } from '@/lib/http'
 import { Check, Cpu, Loader2, Lock, Plus, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useReducer, useRef, type KeyboardEvent } from 'react'
 import { useForm } from 'react-hook-form'
@@ -145,9 +147,21 @@ const modelReducer = (state: ModelState, action: ModelAction): ModelState => {
   }
 }
 
+const providersNeedingApiKey = ['openai', 'anthropic', 'openrouter', 'huggingface']
+
 const formSchema = z
   .object({
-    provider: z.enum(['thunderbolt', 'anthropic', 'openai', 'custom', 'openrouter']),
+    provider: z.enum([
+      'thunderbolt',
+      'anthropic',
+      'openai',
+      'custom',
+      'openrouter',
+      'ollama',
+      'llama-cpp',
+      'huggingface',
+      'huggingface-local',
+    ]),
     name: z.string().min(1, { message: 'Name is required.' }),
     model: z.string().min(1, { message: 'Model name is required.' }),
     customModel: z.string().optional(),
@@ -168,23 +182,19 @@ const formSchema = z
     },
   )
   .refine(
-    (data) => {
-      if (data.provider === 'thunderbolt') {
-        return true // API key not required for thunderbolt
-      }
-      if (data.provider === 'custom') {
-        return true // API key is optional for custom (OpenAI compatible)
-      }
-      return data.apiKey !== undefined && data.apiKey.length > 0
-    },
+    (data) => !providersNeedingApiKey.includes(data.provider) || (data.apiKey && data.apiKey.length > 0),
     {
       message: 'API Key is required for this provider',
       path: ['apiKey'],
     },
   )
 
+const isWebGpuAvailable = () => typeof navigator !== 'undefined' && 'gpu' in navigator
+
 export default function ModelsPage() {
   const db = useDatabase()
+  const isLocalServerSupported = isDesktop() && isTauri()
+  const isWebGpuSupported = isWebGpuAvailable() && !isWebMobilePlatform()
   const [state, dispatch] = useReducer(modelReducer, initialState)
   const {
     isAddDialogOpen,
@@ -403,6 +413,47 @@ export default function ModelsPage() {
           endpoint = 'https://openrouter.ai/api/v1/models'
           headers = { Authorization: `Bearer ${apiKey}` }
           break
+        case 'huggingface':
+          endpoint = 'https://router.huggingface.co/v1/models'
+          if (apiKey) {
+            headers = { Authorization: `Bearer ${apiKey}` }
+          }
+          break
+        case 'ollama': {
+          try {
+            const baseUrl = url || 'http://localhost:11434/v1'
+            const root = baseUrl.replace(/\/v1\/?$/, '').replace(/\/$/, '')
+            const body = await http
+              .get(`${root}/api/tags`, { fetch })
+              .json<{ models?: Array<{ name: string }> }>()
+            const models = (body.models ?? []).map((m) => ({
+              id: m.name,
+              name: m.name,
+              supports_tools: false,
+            }))
+            dispatch({ type: 'FETCH_MODELS_SUCCESS', models })
+          } catch (error) {
+            dispatch({
+              type: 'FETCH_MODELS_FAILURE',
+              error: error instanceof Error ? error.message : 'Could not reach Ollama',
+            })
+          }
+          return
+        }
+        case 'llama-cpp':
+          // llama.cpp does not have a consistent models endpoint; user types the name.
+          dispatch({ type: 'FETCH_MODELS_SUCCESS', models: [] })
+          return
+        case 'huggingface-local': {
+          const { supportedLocalModels } = await import('@/ai/huggingface-local-models')
+          const models = supportedLocalModels.map((m) => ({
+            id: m.id,
+            name: m.displayName,
+            supports_tools: false,
+          }))
+          dispatch({ type: 'FETCH_MODELS_SUCCESS', models })
+          return
+        }
         case 'thunderbolt': {
           const thunderboltModels = [
             { id: 'kimi-k2-instruct', name: 'Kimi K2', supports_tools: true },
@@ -606,6 +657,10 @@ export default function ModelsPage() {
       if (['thunderbolt', 'anthropic'].includes(currentProvider)) {
         fetchAvailableModels(currentProvider)
       }
+      // Ollama has a default URL and no API key — kick off discovery immediately.
+      if (currentProvider === 'ollama') {
+        fetchAvailableModels(currentProvider, '', 'http://localhost:11434/v1')
+      }
 
       // Update the ref for next comparison
       previousProviderRef.current = currentProvider
@@ -623,7 +678,9 @@ export default function ModelsPage() {
 
     if (
       provider &&
-      (['thunderbolt', 'anthropic'].includes(provider) || (provider && apiKey) || (provider === 'custom' && url))
+      (['thunderbolt', 'anthropic'].includes(provider) ||
+        (['openai', 'openrouter', 'huggingface'].includes(provider) && apiKey) ||
+        (['custom', 'ollama', 'llama-cpp'].includes(provider) && url))
     ) {
       fetchAvailableModels(provider, apiKey, url)
     }
@@ -641,6 +698,14 @@ export default function ModelsPage() {
         return 'Custom'
       case 'openrouter':
         return 'OpenRouter'
+      case 'ollama':
+        return 'Ollama'
+      case 'llama-cpp':
+        return 'llama.cpp'
+      case 'huggingface':
+        return 'HuggingFace'
+      case 'huggingface-local':
+        return 'HuggingFace (in-browser)'
       default:
         return provider
     }
@@ -717,6 +782,12 @@ export default function ModelsPage() {
                             <SelectItem value="openai">OpenAI</SelectItem>
                             <SelectItem value="openrouter">OpenRouter</SelectItem>
                             <SelectItem value="anthropic">Anthropic</SelectItem>
+                            <SelectItem value="huggingface">HuggingFace</SelectItem>
+                            {isWebGpuSupported && (
+                              <SelectItem value="huggingface-local">HuggingFace (in-browser)</SelectItem>
+                            )}
+                            {isLocalServerSupported && <SelectItem value="ollama">Ollama</SelectItem>}
+                            {isLocalServerSupported && <SelectItem value="llama-cpp">llama.cpp</SelectItem>}
                             <SelectItem value="custom">Custom</SelectItem>
                           </SelectContent>
                         </Select>
@@ -949,6 +1020,12 @@ export default function ModelsPage() {
           </ResponsiveModalContentComposable>
         </Dialog>
       </PageHeader>
+
+      {isLocalServerSupported && (
+        <div className="mb-4">
+          <LocalServersPanel />
+        </div>
+      )}
 
       <div className="grid gap-4">
         {models.map((model) => {

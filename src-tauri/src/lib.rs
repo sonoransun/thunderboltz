@@ -2,6 +2,8 @@
 // The compiler can't see the usage, so we allow dead_code warnings
 #[allow(dead_code)]
 pub mod commands;
+#[cfg(desktop)]
+pub mod local_server;
 pub mod oauth_server;
 pub mod platform_utils;
 
@@ -38,13 +40,32 @@ pub fn create_app() -> tauri::Builder<tauri::Wry> {
         .plugin(tauri_plugin_haptics::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_store::Builder::default().build())
-        .plugin(platform_utils::init())
-        .invoke_handler(tauri::generate_handler![
+        .plugin(platform_utils::init());
+
+    #[cfg(desktop)]
+    {
+        builder = builder
+            .manage(local_server::LocalServerState::default())
+            .invoke_handler(tauri::generate_handler![
+                commands::toggle_dock_icon,
+                commands::capabilities,
+                commands::set_interface_style,
+                commands::start_oauth_server,
+                local_server::detect_local_binary,
+                local_server::start_local_server,
+                local_server::stop_local_server,
+                local_server::local_server_status,
+            ]);
+    }
+    #[cfg(not(desktop))]
+    {
+        builder = builder.invoke_handler(tauri::generate_handler![
             commands::toggle_dock_icon,
             commands::capabilities,
             commands::set_interface_style,
             commands::start_oauth_server,
         ]);
+    }
 
     #[cfg(debug_assertions)]
     {
@@ -59,7 +80,19 @@ pub fn create_app() -> tauri::Builder<tauri::Wry> {
 pub fn run() {
     std::env::set_var("RUST_BACKTRACE", "1");
 
-    create_app()
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+    let app = create_app()
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|app_handle, event| {
+        if let tauri::RunEvent::ExitRequested { .. } = &event {
+            #[cfg(desktop)]
+            {
+                if let Some(state) = app_handle.try_state::<local_server::LocalServerState>() {
+                    state.kill_all();
+                }
+            }
+            let _ = app_handle;
+        }
+    });
 }

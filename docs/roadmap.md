@@ -23,7 +23,10 @@
 | Cross-Device Cloud Sync | Preview |
 | Google Integration | ✅ |
 | Microsoft Integration | ✅ |
-| Ollama Compatibility | ✅ |
+| Ollama (auto-spawn sidecar) | ✅ |
+| llama.cpp (auto-spawn sidecar) | ✅ |
+| HuggingFace Inference Router | ✅ |
+| In-browser inference (WebGPU / web-llm) | Preview |
 | Agent Memory | Planned |
 | Agent Skills | Planned |
 | Offline Support | Planned |
